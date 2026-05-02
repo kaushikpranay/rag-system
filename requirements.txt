@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-text-splitters
+langgraph
+boto3
+streamlit
+langsmith
+python-dotenv
+pypdf
+psycopg2-binary
+pgvector
