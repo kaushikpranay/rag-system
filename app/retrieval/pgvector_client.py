@@ -72,3 +72,22 @@ def retrieve_similar(query: str, top_k: int = 5) -> list:
     cur.close()
     conn.close()
     return [{"content": r[0], "metadata": r[1], "similarity": r[2]} for r in results]
+
+
+
+def search_human_verified(query: str, top_k: int = 3):
+    conn = get_connection()
+    cur = conn.cursor()
+    embedding = get_bedrock_embedding(query)
+    embedding_str = "[" + ",".join(map(str, embedding)) + "]"  # ← ADD THIS
+    cur.execute("""
+        SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
+        FROM documents
+        WHERE metadata->>'source' = 'human_verified'
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s
+    """, (embedding_str, embedding_str, top_k))  # ← use embedding_str
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows

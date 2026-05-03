@@ -17,11 +17,17 @@ from pgvector.psycopg2 import register_vector
 
 load_dotenv()
 def check_password():
+    ssm = boto3.client("ssm", region_name="us-east-1")
+    stored_hash = ssm.get_parameter(
+        Name="DASHBOARD_PASSWORD_HASH", 
+        WithDecryption=True
+    )["Parameter"]["Value"]
+
     def password_entered():
         entered = hashlib.sha256(
             st.session_state["password"].encode()
         ).hexdigest()
-        if entered == os.getenv("DASHBOARD_PASSWORD_HASH", ""):
+        if entered == stored_hash:
             st.session_state["authenticated"] = True
             del st.session_state["password"]
         else:
@@ -73,16 +79,24 @@ def get_aws_clients():
 
 # ─── SQS Helpers ─────────────────────────────────────────────────────────────
 def receive_from_sqs(max_messages: int = 10) -> list:
-    """Poll SQS for pending escalated queries."""
     clients = get_aws_clients()
+    all_messages = []
+    attempts = 3  # poll multiple times
     try:
-        resp = clients["sqs"].receive_message(
-            QueueUrl=SQS_QUEUE_URL,
-            MaxNumberOfMessages=min(max_messages, 10),
-            WaitTimeSeconds=5,
-            AttributeNames=["All"],
-        )
-        return resp.get("Messages", [])
+        for _ in range(attempts):
+            resp = clients["sqs"].receive_message(
+                QueueUrl=SQS_QUEUE_URL,
+                MaxNumberOfMessages=min(max_messages, 10),
+                WaitTimeSeconds=2,
+                AttributeNames=["All"],
+            )
+            msgs = resp.get("Messages", [])
+            if not msgs:
+                break
+            all_messages.extend(msgs)
+            if len(all_messages) >= max_messages:
+                break
+        return all_messages
     except Exception as e:
         st.error(f"SQS receive error: {e}")
         return []

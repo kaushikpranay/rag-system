@@ -46,8 +46,7 @@ def session_node(state: AgentState) -> AgentState:
     session_id = state.get("session_id", "default-session")
     history = get_session(session_id)
     print(f"[session_node] Session: {session_id}, History length: {len(history)}")
-    state["history"] = history
-    return state
+    return {**state, "chat_history": history}
 
 
 #--------------- Node 3: Retrieval -------------------------------
@@ -55,15 +54,29 @@ def session_node(state: AgentState) -> AgentState:
 def retrieval_node(state: AgentState) -> AgentState:
     query = state["query"]
     print(f"[retrieval_node] Retrieving chunks for: {query}")
+
+    # Step 1: Human-verified first
+    from app.retrieval.pgvector_client import search_human_verified
+    human_results = search_human_verified(query, top_k=3)
+    if human_results and human_results[0][2] > 0.75:
+        print(f"[retrieval_node] Human-verified answer found. Similarity: {human_results[0][2]:.2f}")
+        return {
+            **state,
+            "retrieved_chunks": [{"content": human_results[0][0], "metadata": human_results[0][1], "similarity": human_results[0][2]}],
+            "context": human_results[0][0]
+        }
+
+    # Step 2: Fallback to general search
     chunks = retrieve_similar(query, top_k=5)
     print(f"[retrieval_node] {len(chunks)} chunks retrieved")
     return {**state, "retrieved_chunks": chunks}
 
 
-
 #------Node 4: Context -----------------
-
-def context_node(state: AgentState)-> AgentState:
+def context_node(state: AgentState) -> AgentState:
+    if state.get("context"):  # already set by human-verified path
+        print(f"[context_node] Using pre-set human-verified context")
+        return state
     chunks = state["retrieved_chunks"]
     if not chunks:
         context = "No relevant context found"
@@ -122,15 +135,17 @@ def evaluation_node(state: AgentState)->AgentState:
 
     #Low confidence if: no chunks or llm said it doesn't know. 
     low_confidence_phrases = [
-        "I don't have enough information",
-        "I can not answer",
-        "not enough information",
-        "based only on the context provided",
-        "no relevent information"
+    "i don't have enough information",
+    "i can not answer",
+    "not enough information",
+    "based only on the context provided",
+    "no relevant information",
+    "i cannot answer",
+    "cannot provide an answer"
     ]
 
     is_low = (
-        len(chunks) == 0 or 
+        len(chunks) == 0 or
         any(phrase in answer.lower() for phrase in low_confidence_phrases)
     )
     confidence = "low" if is_low else "high"
@@ -152,6 +167,12 @@ def output_node(state: AgentState) -> AgentState:
             state["session_id"],
             state["query"],
             state["answer"]
+        )
+        # ✅ ADD THIS LINE:
+        state["answer"] = (
+           "I don't have the answer for this. "
+           "I've asked my team — they're on it. "
+           "Ask me the same question again in about 1 minute. I'll have the answer."
         )
         print(f"[output_node] Escalating query to SQS - low confidence")
     else:

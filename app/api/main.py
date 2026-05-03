@@ -13,7 +13,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.agent.graph import run_agent
-
+from app.retrieval.pgvector_client import get_connection
+from app.escalation.sqs_worker import send_to_sqs
 app = FastAPI(title="RAG Query Resolution System")
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -23,7 +24,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = "s|\"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'\"\"default-src 'self'\"|\"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'\"|g"
+        # response.headers["Content-Security-Policy"] = "s|\"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'\"\"default-src 'self'\"|\"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'\"|g"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
         response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
