@@ -1,17 +1,26 @@
+import boto3
 import os
-from dotenv import load_dotenv
-load_dotenv()
 
-class Config:
-    GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-    AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
-    DYNAMODB_TABLE = os.getenv('DYNAMODB_TABLE', 'rag-session-memory')
-    SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL')
-    CHROMA_PORT = os.getenv('CHROMA_PORT', 'localhost')
-    CHROMA_HOST = os.getenv('CHROMA_HOST', 8000)
-    LANGSMITH_API_KEY = os.getenv('LANGSMITH_API_KEY')
-    LANGSMITH_PROJECT = os.getenv('LANGSMITH_PROJECT', 'rag-system')
+def get_secret(name: str) -> str:
+    ssm = boto3.client('ssm', region_name='us-east-1')
+    response = ssm.get_parameter(Name=name, WithDecryption=True)
+    return response['Parameter']['Value']
 
+# AWS
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE")
+SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")
 
-config = Config()
+# RDS
+RDS_HOST = os.getenv("RDS_HOST")
+RDS_PORT = os.getenv("RDS_PORT", "5432")
+RDS_DB = os.getenv("RDS_DB")
+RDS_USER = os.getenv("RDS_USER")
+RDS_PASSWORD = get_secret("/rag-system/RDS_PASSWORD")
+
+# Groq
+GROQ_API_KEY = get_secret("/rag-system/GROQ_API_KEY")
+
+# Dashboard
+DASHBOARD_PASSWORD_HASH = get_secret("/rag-system/DASHBOARD_PASSWORD_HASH")

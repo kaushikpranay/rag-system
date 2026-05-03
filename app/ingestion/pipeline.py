@@ -36,4 +36,15 @@ def ingest(s3_key: str):
     print(f"[Ingestion] Done: {s3_key}")
 
 if __name__ == "__main__":
-    ingest("raw-documents/test.pdf")
+    # Ingest all PDFs in raw-documents/ folder from S3
+    s3 = boto3.client('s3', region_name=AWS_REGION)
+    response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="raw-documents/")
+    
+    if 'Contents' not in response:
+        print("[Ingestion] No files found in raw-documents/")
+    else:
+        for obj in response['Contents']:
+            key = obj['Key']
+            if key.endswith('.pdf'):
+                print(f"[Ingestion] Processing: {key}")
+                ingest(key)

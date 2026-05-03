@@ -38,16 +38,21 @@ def get_bedrock_embedding(text: str) -> list:
 def store_chunks(chunks: list):
     conn = get_connection()
     cur = conn.cursor()
+    stored = 0
     for chunk in chunks:
-        embedding = get_bedrock_embedding(chunk.page_content)
+        clean_text = chunk.page_content.replace('\x00', '').strip()
+        if not clean_text:
+            continue  # skip empty chunks
+        embedding = get_bedrock_embedding(clean_text)
         cur.execute(
             "INSERT INTO documents (content, metadata, embedding) VALUES (%s, %s, %s)",
-            (chunk.page_content, json.dumps(chunk.metadata), embedding)
+            (clean_text, json.dumps(chunk.metadata), embedding)
         )
+        stored += 1
     conn.commit()
     cur.close()
     conn.close()
-    print(f"[pgvector] {len(chunks)} chunks stored")
+    print(f"[pgvector] {stored} chunks stored")
 
 def retrieve_similar(query: str, top_k: int = 5) -> list:
     embedding = get_bedrock_embedding(query)

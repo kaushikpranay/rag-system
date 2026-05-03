@@ -7,6 +7,8 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage
 from typing import TypedDict, List, Optional
 from app.retrieval.pgvector_client import retrieve_similar
+from app.memory.dynamodb_client import get_session, save_session
+from app.escalation.sqs_worker import send_to_sqs
 
 
 load_dotenv()
@@ -39,13 +41,13 @@ def input_node(state: AgentState)-> AgentState:
 
 #------ Node 2: Session (Dummy for now) --------
 
-def session_node(state: AgentState)-> AgentState:
-    #dummy session -DynamoDB in next step
-    session_id = state.get("session_id", "dummy-session-001")
-    chat_history = state.get("chat_history", [])
-    print(f"[session_node] Session: {session_id}, History length: {len(chat_history)}")
-    return {**state, "session_id": session_id, "chat_history": chat_history}
 
+def session_node(state: AgentState) -> AgentState:
+    session_id = state.get("session_id", "default-session")
+    history = get_session(session_id)
+    print(f"[session_node] Session: {session_id}, History length: {len(history)}")
+    state["history"] = history
+    return state
 
 
 #--------------- Node 3: Retrieval -------------------------------
@@ -140,12 +142,22 @@ def evaluation_node(state: AgentState)->AgentState:
 # ─── Node 7: Output ───────────────────────────────────────────────────────────
 
 def output_node(state: AgentState) -> AgentState:
+    save_session(
+        state.get("session_id", "default-session"),
+        state["query"],
+        state["answer"]
+    )
     if state["escalate"]:
-        print(f"[output_node] Escalating query to SQS — low confidence")
-        # SQS push will be wired in Phase 6
+        send_to_sqs(
+            state["session_id"],
+            state["query"],
+            state["answer"]
+        )
+        print(f"[output_node] Escalating query to SQS - low confidence")
     else:
-        print(f"[output_node] Returning answer to user")
+        print(f"[output_node] Query resolved - no escalation needed")
     return state
+
 
 #-----Routing Logic---------------------------
 
@@ -184,6 +196,8 @@ agent = build_agent()
 # ─── Run Function ─────────────────────────────────────────────────────────────
 
 def run_agent(query: str, session_id: str = "test-session") -> dict:
+    if session_id is None:
+        session_id = str(uuid.uuid4())
     initial_state = AgentState(
         query=query,
         session_id=session_id,
