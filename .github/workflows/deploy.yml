@@ -1,18 +1,26 @@
 name: Deploy to EC2
-
 on:
   push:
     branches:
       - main
-
 jobs:
   deploy:
     name: SSH and Deploy
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -22,20 +30,14 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ec2-user/rag-system
-
             echo ">>> Pulling latest code..."
             git pull origin main
-
             echo ">>> Installing dependencies..."
             sudo TMPDIR=/home/ec2-user pip3.11 install -r requirements.txt --no-cache-dir -q
-
             echo ">>> Restarting FastAPI..."
             sudo supervisorctl restart fastapi
-
             echo ">>> Restarting Streamlit..."
             sudo supervisorctl restart streamlit
-
             echo ">>> Status check..."
             sudo supervisorctl status
-
             echo ">>> Deploy complete."
