@@ -392,6 +392,7 @@
         var pollingInterval = null;
         var chatHistory = [];
         var selectedQuery = null;
+        var pendingEscalations = []; // per-query tracking
 
         function scrollDown() {
             chatBox.scrollTop = chatBox.scrollHeight;
@@ -443,7 +444,7 @@
                 if (data.escalated) {
                     loading.className = 'msg bot escalated';
                     loading.innerHTML = ans + '<div class="confidence">Confidence: ' + data.confidence + ' &nbsp;&middot;&nbsp; Auto-escalated ✓</div>';
-                    startPolling();
+                    startPolling(query);
                 } else {
                     loading.innerHTML = ans + '<div class="confidence">Confidence: ' + data.confidence + '</div>';
                 }
@@ -503,7 +504,7 @@
                     var q = selectedQuery;
                     togglePanel();
                     addStatus('⏳ "' + q + '" sent to human agent. Ask me again in ~1 minute.');
-                    startPolling();
+                    startPolling(q);
                     selectedQuery = null;
                 }
             } catch (e) {
@@ -514,18 +515,47 @@
             btn.textContent = 'Send to Human';
         }
 
-        function startPolling() {
+        function startPolling(escalatedQuery) {
+            // Track each escalated query independently
+            pendingEscalations.push({
+                query: escalatedQuery,
+                pollCount: 0,
+                resolved: false
+            });
+
+            // Only start one interval loop
             if (pollingInterval) return;
+
             pollingInterval = setInterval(async function () {
-                try {
-                    var res = await fetch('/queue-status/' + currentSessionId);
-                    var data = await res.json();
-                    if (!data.in_queue && data.answer) {
-                        clearInterval(pollingInterval);
-                        pollingInterval = null;
-                        addStatus('✅ Human agent answered: ' + safe(data.answer), 'resolved-msg');
+                var allDone = true;
+
+                for (var i = 0; i < pendingEscalations.length; i++) {
+                    var esc = pendingEscalations[i];
+                    if (esc.resolved) continue;
+
+                    esc.pollCount++;
+                    if (esc.pollCount > 60) {
+                        esc.resolved = true;
+                        addStatus('⏰ Timed out waiting for: "' + esc.query + '"', 'status-msg');
+                        continue;
                     }
-                } catch (e) { }
+
+                    allDone = false;
+
+                    try {
+                        var res = await fetch('/queue-status/' + currentSessionId + '?query=' + encodeURIComponent(esc.query));
+                        var data = await res.json();
+                        if (!data.in_queue && data.answer) {
+                            esc.resolved = true;
+                            addStatus('✅ Human agent answered: ' + safe(data.answer), 'resolved-msg');
+                        }
+                    } catch (e) { }
+                }
+
+                if (allDone) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
             }, 5000);
         }
 

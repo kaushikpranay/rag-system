@@ -3,6 +3,7 @@ Phase 7 — Streamlit Human Agent Dashboard
 RAG Query Resolution System
 File: app/dashboard/streamlit_app.py
 """
+import html as html_lib
 import hashlib
 import streamlit as st
 import boto3
@@ -157,10 +158,12 @@ def get_bedrock_embedding(text: str) -> list:
         return None
 
 
-def store_verified_answer_rds(query: str, answer: str) -> bool:
+def store_verified_answer_rds(query: str, answer: str, session_id: str = "") -> bool:
     """Store verified Q&A as new embedding in RDS pgvector."""
-    text_to_embed = f"Q: {query}\nA: {answer}"
-    embedding = get_bedrock_embedding(text_to_embed)
+    # Store the full Q&A as the document content
+    text_to_store = f"Q: {query}\nA: {answer}"
+    # Embed only the QUERY so similarity search (which also embeds only the query) matches correctly
+    embedding = get_bedrock_embedding(query)
     if embedding is None:
         return False
     conn = None
@@ -173,10 +176,11 @@ def store_verified_answer_rds(query: str, answer: str) -> bool:
             VALUES (%s, %s, %s)
             """,
             (
-                text_to_embed,
+                text_to_store,
                 json.dumps({
                     "source": "human_verified",
                     "query": query,
+                    "session_id": session_id,
                     "verified_at": datetime.now(timezone.utc).isoformat(),
                 }),
                 embedding,
@@ -334,7 +338,7 @@ with st.sidebar:
 
     queue_depth = get_queue_depth()
     depth_color = "#f5a623" if queue_depth > 0 else "#27c93f"
-    depth_label = "Pending" if queue_depth != 1 else "Pending"
+    depth_label = "Pending" if queue_depth != 1 else "Pending item"
 
     st.markdown(f"""
     <div class="metric-box">
@@ -433,6 +437,11 @@ else:
         query      = body.get("query", "—")
         llm_answer = body.get("answer", "—")
 
+        # Sanitize to prevent XSS via crafted SQS messages
+        session_id_safe = html_lib.escape(session_id)
+        query_safe      = html_lib.escape(query)
+        llm_answer_safe = html_lib.escape(llm_answer)
+
         # Card
         card_class = "query-card resolved" if is_resolved else "query-card"
         badge_class = "badge resolved" if is_resolved else "badge"
@@ -445,11 +454,11 @@ else:
                 <span class="{badge_class}">{badge_text}</span>
             </div>
             <div class="label">Session ID</div>
-            <div class="value" style="font-family:monospace; font-size:12px;">{session_id}</div>
+            <div class="value" style="font-family:monospace; font-size:12px;">{session_id_safe}</div>
             <div class="label">User Query</div>
-            <div class="value">❓ {query}</div>
+            <div class="value">❓ {query_safe}</div>
             <div class="label">LLM Answer (Low Confidence)</div>
-            <div class="value" style="color:#aaa;">🤖 {llm_answer}</div>
+            <div class="value" style="color:#aaa;">🤖 {llm_answer_safe}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -472,7 +481,7 @@ else:
                     else:
                         with st.spinner("Storing verified answer..."):
                             # 1. Store in RDS pgvector
-                            rds_ok = store_verified_answer_rds(query, verified_answer.strip())
+                            rds_ok = store_verified_answer_rds(query, verified_answer.strip(), session_id)
 
                             # 2. Store in S3
                             s3_ok = store_verified_answer_s3(session_id, query, verified_answer.strip())

@@ -1,10 +1,9 @@
 import os
-import json
-import boto3
+import uuid
+import logging
 from groq import Groq
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage
 from typing import TypedDict, List, Optional
 from app.retrieval.pgvector_client import retrieve_similar
 from app.memory.dynamodb_client import get_session, save_session
@@ -13,8 +12,7 @@ from app.escalation.sqs_worker import send_to_sqs
 
 load_dotenv()
 
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-BEDROCK_ID = os.getenv("GROQ_API_KEY")
+logger = logging.getLogger(__name__)
 
 #
 # -------------State Schema------------------------
@@ -26,8 +24,9 @@ class AgentState(TypedDict):
     retrieved_chunks: List[dict]
     context: str
     answer: str
-    confidence: str     #high or low
+    confidence: str     # high, low, or retry
     escalate: bool
+    retry_count: int
     error: Optional[str]
 
 #------Node 1: Input ----------------------------
@@ -35,8 +34,8 @@ class AgentState(TypedDict):
 def input_node(state: AgentState)-> AgentState:
     query = state["query"].strip()
     if not query:
-        return {**state, "error": "Empty query recived"}
-    print(f"[input_node] Query: {query}")
+        return {**state, "error": "Empty query received"}
+    logger.info(f"[input_node] Query: {query}")
     return {**state, "query": query, "error": None}
 
 #------ Node 2: Session (Dummy for now) --------
@@ -45,7 +44,7 @@ def input_node(state: AgentState)-> AgentState:
 def session_node(state: AgentState) -> AgentState:
     session_id = state.get("session_id", "default-session")
     history = get_session(session_id)
-    print(f"[session_node] Session: {session_id}, History length: {len(history)}")
+    logger.info(f"[session_node] Session: {session_id}, History length: {len(history)}")
     return {**state, "chat_history": history}
 
 
@@ -53,29 +52,41 @@ def session_node(state: AgentState) -> AgentState:
 
 def retrieval_node(state: AgentState) -> AgentState:
     query = state["query"]
-    print(f"[retrieval_node] Retrieving chunks for: {query}")
+    retry_count = state.get("retry_count", 0)
+    logger.info(f"[retrieval_node] Retrieving chunks for: {query} (attempt {retry_count + 1}/3)")
 
-    # Step 1: Human-verified first
-    from app.retrieval.pgvector_client import search_human_verified
-    human_results = search_human_verified(query, top_k=3)
-    if human_results and human_results[0][2] > 0.75:
-        print(f"[retrieval_node] Human-verified answer found. Similarity: {human_results[0][2]:.2f}")
-        return {
-            **state,
-            "retrieved_chunks": [{"content": human_results[0][0], "metadata": human_results[0][1], "similarity": human_results[0][2]}],
-            "context": human_results[0][0]
-        }
+    # Widen search parameters on each retry
+    human_threshold = max(0.40, 0.55 - (retry_count * 0.05))  # 0.55 → 0.50 → 0.45
+    top_k = 5 + (retry_count * 3)                              # 5 → 8 → 11
+    min_sim = max(0.10, 0.30 - (retry_count * 0.10))           # 0.30 → 0.20 → 0.10
 
-    # Step 2: Fallback to general search
-    chunks = retrieve_similar(query, top_k=5)
-    print(f"[retrieval_node] {len(chunks)} chunks retrieved")
-    return {**state, "retrieved_chunks": chunks}
+    try:
+        # Step 1: Human-verified answers first (semantic match)
+        from app.retrieval.pgvector_client import search_human_verified
+        human_results = search_human_verified(query, top_k=3)
+        if human_results and human_results[0][2] > human_threshold:
+            logger.info(f"[retrieval_node] Human-verified answer found. Similarity: {human_results[0][2]:.2f} (threshold: {human_threshold})")
+            return {
+                **state,
+                "retrieved_chunks": [{"content": human_results[0][0], "metadata": human_results[0][1], "similarity": human_results[0][2]}],
+                "context": human_results[0][0]
+            }
+
+        # Step 2: Fallback to general search with progressive widening
+        chunks = retrieve_similar(query, top_k=top_k, min_similarity=min_sim)
+        logger.info(f"[retrieval_node] {len(chunks)} chunks retrieved (top_k={top_k}, min_sim={min_sim})")
+        return {**state, "retrieved_chunks": chunks}
+    except Exception as e:
+        logger.error(f"[retrieval_node] Retrieval failed: {e}")
+        return {**state, "retrieved_chunks": []}
 
 
 #------Node 4: Context -----------------
 def context_node(state: AgentState) -> AgentState:
-    if state.get("context"):  # already set by human-verified path
-        print(f"[context_node] Using pre-set human-verified context")
+    # Check if context was already set by the human-verified retrieval path
+    # (not just the empty string from initialization)
+    if state.get("context") and state["context"].strip():
+        logger.info(f"[context_node] Using pre-set human-verified context")
         return state
     chunks = state["retrieved_chunks"]
     if not chunks:
@@ -85,7 +96,7 @@ def context_node(state: AgentState) -> AgentState:
             f"[Chunk {i+1} | Similarity: {c['similarity']:.2f}]\n{c['content']}"
             for i, c in enumerate(chunks)
         ])
-    print(f"[context_node] Context built - {len(chunks)} chunks")
+    logger.info(f"[context_node] Context built - {len(chunks)} chunks")
     return {**state, "context": context}
 
 
@@ -96,96 +107,146 @@ def llm_node(state: AgentState) -> AgentState:
     context = state["context"]
     chat_history = state["chat_history"]
 
+    # Build history string from DynamoDB format {"query", "answer", "timestamp"}
     history_str = ""
     for msg in chat_history[-4:]:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        history_str += f"{role.capitalize()}: {content}\n"
+        q = msg.get("query", "")
+        a = msg.get("answer", "")
+        if q:
+            history_str += f"User: {q}\n"
+        if a:
+            history_str += f"Assistant: {a}\n"
 
-    prompt = f"""You are a helpful assistant. Answer the user's question using ONLY the context provided below.
-If the context does not contain enough information to answer, say exactly: "I don't have enough information to answer this."
+    prompt = f"""You are a helpful customer care assistant. Use the following information to answer the user's question:
+
+1. **Chat History** — Use this to understand conversational context (e.g., follow-up questions, references to previous messages).
+2. **Retrieved Context** — Use this for factual/domain-specific answers.
+
+Rules:
+- If the user is asking about something discussed in the chat history (e.g., "what did I ask before?", "repeat that", etc.), answer from the chat history.
+- If the user is asking a factual question, answer from the retrieved context.
+- If NEITHER the chat history NOR the retrieved context contains enough information to answer, say exactly: "I don't have enough information to answer this."
+- Do NOT make up information. Only use what is provided.
+- Answer naturally and directly. Do NOT say things like "based on our previous conversation", "according to chat history", or "from our earlier discussion". Just answer as if you always knew the answer.
+- Only mention past conversations when the user explicitly asks about them (e.g., "what did I ask before?").
 
 Chat History:
 {history_str}
 
-Context:
+Retrieved Context:
 {context}
 
 User Question: {query}
 
 Answer:"""
 
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    try:
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=512
-    )
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=512
+        )
 
-    answer = response.choices[0].message.content.strip()
-    print(f"[llm_node] Answer: {answer[:100]}...")
-    return {**state, "answer": answer}
-#-------Node 6: Evalution --------------------
+        answer = response.choices[0].message.content.strip()
+        logger.info(f"[llm_node] Answer: {answer[:100]}...")
+        return {**state, "answer": answer}
+    except Exception as e:
+        logger.error(f"[llm_node] LLM call failed: {e}")
+        return {**state, "answer": "I'm sorry, I'm experiencing technical difficulties. Please try again shortly."}
+#-------Node 6: Evaluation --------------------
 
 def evaluation_node(state: AgentState)->AgentState:
     answer = state["answer"]
     chunks = state["retrieved_chunks"]
+    retry_count = state.get("retry_count", 0)
 
-
-    #Low confidence if: no chunks or llm said it doesn't know. 
     low_confidence_phrases = [
     "i don't have enough information",
+    "i don't have the information",
     "i can not answer",
-    "not enough information",
-    "based only on the context provided",
-    "no relevant information",
     "i cannot answer",
-    "cannot provide an answer"
+    "i'm not able to answer",
+    "i am not able to answer",
+    "not enough information",
+    "no relevant information",
+    "no information available",
+    "cannot provide an answer",
+    "don't have enough context",
+    "does not contain enough information",
+    "i'm sorry, i don't know",
+    "i'm unable to",
+    "the context does not",
+    "not mentioned in the context",
+    "no relevant context",
     ]
 
-    is_low = (
-        len(chunks) == 0 or
-        any(phrase in answer.lower() for phrase in low_confidence_phrases)
-    )
-    confidence = "low" if is_low else "high"
-    escalate = is_low
+    llm_refused = any(phrase in answer.lower() for phrase in low_confidence_phrases)
 
-    print(f"[evaluation_node] Confidence: {confidence} | Escalate: {escalate}")
-    return {**state, "confidence": confidence, "escalate": escalate}
+    if not llm_refused:
+        # LLM gave a confident answer — accept it
+        logger.info(f"[evaluation_node] Confidence: high | Attempt: {retry_count + 1}")
+        return {**state, "confidence": "high", "escalate": False}
+
+    # LLM couldn't answer — decide: retry or escalate
+    if retry_count < 2:
+        # Retry with wider search params (max 3 attempts: 0, 1, 2)
+        new_retry = retry_count + 1
+        logger.info(f"[evaluation_node] LLM refused — retrying ({new_retry}/3) with wider search")
+        return {
+            **state,
+            "confidence": "retry",
+            "escalate": False,
+            "retry_count": new_retry,
+            "context": "",             # clear so context_node rebuilds from new chunks
+            "retrieved_chunks": [],    # clear so retrieval_node fetches fresh
+        }
+    else:
+        # All 3 attempts exhausted — escalate to human
+        logger.info(f"[evaluation_node] All 3 attempts failed — escalating to human")
+        return {**state, "confidence": "low", "escalate": True}
 
 # ─── Node 7: Output ───────────────────────────────────────────────────────────
 
 def output_node(state: AgentState) -> AgentState:
-    save_session(
-        state.get("session_id", "default-session"),
-        state["query"],
-        state["answer"]
-    )
+    session_id = state.get("session_id", "default-session")
+
     if state["escalate"]:
         send_to_sqs(
-            state["session_id"],
+            session_id,
             state["query"],
             state["answer"]
         )
-        # ✅ ADD THIS LINE:
-        state["answer"] = (
+        escalation_msg = (
            "I don't have the answer for this. "
            "I've asked my team — they're on it. "
            "Ask me the same question again in about 1 minute. I'll have the answer."
         )
-        print(f"[output_node] Escalating query to SQS - low confidence")
+        # Save the escalation message to history (not the bad LLM answer)
+        save_session(session_id, state["query"], escalation_msg)
+        logger.info(f"[output_node] Escalating query to SQS - low confidence")
+        return {**state, "answer": escalation_msg}
     else:
-        print(f"[output_node] Query resolved - no escalation needed")
+        # Save the good answer to history
+        save_session(session_id, state["query"], state["answer"])
+        logger.info(f"[output_node] Query resolved - no escalation needed")
     return state
 
 
 #-----Routing Logic---------------------------
 
 def route_after_input(state: AgentState):
-    if(state.get("erro")):
+    if state.get("error"):
         return END
     return "session_node"
+
+
+def route_after_evaluation(state: AgentState):
+    """After evaluation: retry retrieval or proceed to output."""
+    if state.get("confidence") == "retry":
+        return "retrieval_node"    # loop back for another attempt
+    return "output_node"           # high or low → output
 
 
 #--------------------build-Graph------------------------------------
@@ -207,7 +268,8 @@ def build_agent():
     graph.add_edge("retrieval_node", "context_node")
     graph.add_edge("context_node", "llm_node")
     graph.add_edge("llm_node", "evaluation_node")
-    graph.add_edge("evaluation_node", "output_node")
+    # Retry loop: evaluation can route back to retrieval or forward to output
+    graph.add_conditional_edges("evaluation_node", route_after_evaluation)
     graph.add_edge("output_node", END)
 
     return graph.compile()
@@ -228,6 +290,7 @@ def run_agent(query: str, session_id: str = "test-session") -> dict:
         answer="",
         confidence="",
         escalate=False,
+        retry_count=0,
         error=None
     )
     result = agent.invoke(initial_state)

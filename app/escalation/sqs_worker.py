@@ -33,7 +33,7 @@ def receive_from_sqs(max_messages: int=10)-> list:
     try:
         response = sqs.receive_message(
             QueueUrl=SQS_QUEUE_URL,
-            MaxNumberofMessages=max_messages,
+            MaxNumberOfMessages=max_messages,
             WaitTimeSeconds=5
         )
         return response.get("Messages", [])

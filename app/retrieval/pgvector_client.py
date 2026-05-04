@@ -1,4 +1,5 @@
 import os
+import logging
 import psycopg2
 import boto3
 import json
@@ -6,12 +7,17 @@ from dotenv import load_dotenv
 from pgvector.psycopg2 import register_vector
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 RDS_HOST = os.getenv("RDS_HOST")
 RDS_PORT = os.getenv("RDS_PORT", 5432)
 RDS_DB = os.getenv("RDS_DB", "ragdb")
 RDS_USER = os.getenv("RDS_USER", "ragadmin")
 RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+# Reuse a single Bedrock client instead of creating one per-call
+_bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
 
 def get_connection():
     conn = psycopg2.connect(
@@ -24,9 +30,8 @@ def get_connection():
     return conn
 
 def get_bedrock_embedding(text: str) -> list:
-    client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
     body = json.dumps({"inputText": text})
-    response = client.invoke_model(
+    response = _bedrock_client.invoke_model(
         modelId="amazon.titan-embed-text-v2:0",
         contentType="application/json",
         accept="application/json",
@@ -52,9 +57,9 @@ def store_chunks(chunks: list):
     conn.commit()
     cur.close()
     conn.close()
-    print(f"[pgvector] {stored} chunks stored")
+    logger.info(f"[pgvector] {stored} chunks stored")
 
-def retrieve_similar(query: str, top_k: int = 5) -> list:
+def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) -> list:
     embedding = get_bedrock_embedding(query)
     embedding_str = "[" + ",".join(map(str, embedding)) + "]"
     conn = get_connection()
@@ -63,10 +68,11 @@ def retrieve_similar(query: str, top_k: int = 5) -> list:
         """
         SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
         FROM documents
+        WHERE 1 - (embedding <=> %s::vector) > %s
         ORDER BY embedding <=> %s::vector
         LIMIT %s
         """,
-        (embedding_str, embedding_str, top_k)
+        (embedding_str, embedding_str, min_similarity, embedding_str, top_k)
     )
     results = cur.fetchall()
     cur.close()
@@ -79,14 +85,14 @@ def search_human_verified(query: str, top_k: int = 3):
     conn = get_connection()
     cur = conn.cursor()
     embedding = get_bedrock_embedding(query)
-    embedding_str = "[" + ",".join(map(str, embedding)) + "]"  # ← ADD THIS
+    embedding_str = "[" + ",".join(map(str, embedding)) + "]"
     cur.execute("""
         SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
         FROM documents
         WHERE metadata->>'source' = 'human_verified'
         ORDER BY embedding <=> %s::vector
         LIMIT %s
-    """, (embedding_str, embedding_str, top_k))  # ← use embedding_str
+    """, (embedding_str, embedding_str, top_k))
     rows = cur.fetchall()
     cur.close()
     conn.close()

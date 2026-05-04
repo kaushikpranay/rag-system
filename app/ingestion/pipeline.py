@@ -1,5 +1,6 @@
 import os
 import boto3
+import tempfile
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -17,7 +18,8 @@ splitter = RecursiveCharacterTextSplitter(
 
 def load_document_from_s3(s3_key: str) -> list:
     s3 = boto3.client("s3", region_name=AWS_REGION)
-    local_path = f"/tmp/{os.path.basename(s3_key)}"
+    tmp_dir = tempfile.mkdtemp()
+    local_path = os.path.join(tmp_dir, os.path.basename(s3_key))
     s3.download_file(S3_BUCKET, s3_key, local_path)
     print(f"[Ingestion] Downloaded to {local_path}")
     loader = PyPDFLoader(local_path)
