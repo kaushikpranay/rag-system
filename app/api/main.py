@@ -74,28 +74,28 @@ def health():
 
 @app.post("/query", response_model=QueryResponse)
 @limiter.limit("20/minute")
-def resolve_query(request: QueryRequest, req: Request):
+def resolve_query(request: Request, body: QueryRequest):
     try:
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = body.session_id or str(uuid.uuid4())
 
         # Log with PII masked
-        logger.info(f"[query] session={session_id} query={mask_pii(request.query[:80])}")
+        logger.info(f"[query] session={session_id} query={mask_pii(body.query[:80])}")
 
         # Check for prompt injection attempts
-        if detect_prompt_injection(request.query):
+        if detect_prompt_injection(body.query):
             logger.warning(f"[query] Prompt injection blocked for session={session_id}")
             return QueryResponse(
                 session_id=session_id,
-                query=request.query,
+                query=body.query,
                 answer="I can only help with customer support questions. Please rephrase your question.",
                 confidence="blocked",
                 escalated=False
             )
 
-        result = run_agent(request.query, session_id)
+        result = run_agent(body.query, session_id)
         return QueryResponse(
             session_id=session_id,
-            query=request.query,
+            query=body.query,
             answer=result["answer"],
             confidence=result["confidence"],
             escalated=result["escalate"]
@@ -106,8 +106,8 @@ def resolve_query(request: QueryRequest, req: Request):
 
 @app.post("/escalate")
 @limiter.limit("5/minute")
-def manual_escalate(request: QueryRequest, req: Request):
-    session_id = request.session_id or str(uuid.uuid4())
+def manual_escalate(request: Request, body: QueryRequest):
+    session_id = body.session_id or str(uuid.uuid4())
 
     # Validate session_id format (must be a UUID)
     try:
@@ -115,12 +115,12 @@ def manual_escalate(request: QueryRequest, req: Request):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    send_to_sqs(session_id, request.query, "Manual escalation requested")
+    send_to_sqs(session_id, body.query, "Manual escalation requested")
     return {"escalated": True, "session_id": session_id}
 
 @app.get("/queue-status/{session_id}")
 @limiter.limit("30/minute")
-def queue_status(session_id: str, query: str = "", req: Request = None):
+def queue_status(request: Request, session_id: str, query: str = ""):
     """
     Check if a human-verified answer exists for a specific query.
     1. First checks this session's answers matching the exact query.
