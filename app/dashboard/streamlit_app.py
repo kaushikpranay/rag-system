@@ -5,6 +5,7 @@ File: app/dashboard/streamlit_app.py
 """
 import html as html_lib
 import hashlib
+import logging
 import streamlit as st
 import boto3
 import json
@@ -17,6 +18,8 @@ from dotenv import load_dotenv
 from pgvector.psycopg2 import register_vector
 
 load_dotenv()
+
+dash_logger = logging.getLogger("dashboard")
 def check_password():
     ssm = boto3.client("ssm", region_name="us-east-1")
     stored_hash = ssm.get_parameter(
@@ -99,7 +102,8 @@ def receive_from_sqs(max_messages: int = 10) -> list:
                 break
         return all_messages
     except Exception as e:
-        st.error(f"SQS receive error: {e}")
+        dash_logger.error(f"SQS receive error: {e}")
+        st.error("Failed to fetch messages from queue. Please try again.")
         return []
 
 
@@ -113,7 +117,8 @@ def delete_from_sqs(receipt_handle: str) -> bool:
         )
         return True
     except Exception as e:
-        st.error(f"SQS delete error: {e}")
+        dash_logger.error(f"SQS delete error: {e}")
+        st.error("Failed to remove message from queue.")
         return False
 
 
@@ -154,7 +159,8 @@ def get_bedrock_embedding(text: str) -> list:
         result = json.loads(resp["body"].read())
         return result["embedding"]
     except Exception as e:
-        st.error(f"Bedrock embedding error: {e}")
+        dash_logger.error(f"Bedrock embedding error: {e}")
+        st.error("Embedding generation failed. Please try again.")
         return None
 
 
@@ -190,7 +196,8 @@ def store_verified_answer_rds(query: str, answer: str, session_id: str = "") -> 
         cur.close()
         return True
     except Exception as e:
-        st.error(f"RDS insert error: {e}")
+        dash_logger.error(f"RDS insert error: {e}")
+        st.error("Failed to store verified answer in database.")
         return False
     finally:
         if conn:
@@ -216,7 +223,8 @@ def store_verified_answer_s3(session_id: str, query: str, answer: str) -> bool:
         )
         return True
     except Exception as e:
-        st.error(f"S3 store error: {e}")
+        dash_logger.error(f"S3 store error: {e}")
+        st.error("Failed to archive answer. Please try again.")
         return False
 
 # ─── DynamoDB — update session with verified answer ──────────────────────────
@@ -238,7 +246,7 @@ def update_session_with_verified(session_id: str, query: str, answer: str):
             ExpressionAttributeValues={":h": history},
         )
     except Exception as e:
-        st.warning(f"DynamoDB update skipped: {e}")
+        dash_logger.warning(f"DynamoDB update skipped: {e}")
 
 # ─── Page Config ─────────────────────────────────────────────────────────────
 st.set_page_config(

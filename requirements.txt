@@ -1,22 +1,33 @@
+# Core
 fastapi
 uvicorn
+
+# AI / LLM
 langchain
 langchain-community
 langchain-text-splitters
 langgraph
+groq
+
+# AWS
 boto3
-streamlit
-langsmith
-python-dotenv
-pypdf
+
+# Database
 psycopg2-binary
 pgvector
+
+# Security
 slowapi==0.1.9
-pytest
-langsmith
+
+# Dashboard
+streamlit
+
+# Utilities
 python-dotenv
 pypdf
-psycopg2-binary
-pgvector
+
+# Observability (optional)
+langsmith
+
+# Testing
 pytest
-graphifyy==0.4.23

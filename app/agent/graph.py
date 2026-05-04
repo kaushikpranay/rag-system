@@ -8,6 +8,7 @@ from typing import TypedDict, List, Optional
 from app.retrieval.pgvector_client import retrieve_similar
 from app.memory.dynamodb_client import get_session, save_session
 from app.escalation.sqs_worker import send_to_sqs
+from app.utils.sanitizer import mask_pii
 
 
 load_dotenv()
@@ -35,7 +36,7 @@ def input_node(state: AgentState)-> AgentState:
     query = state["query"].strip()
     if not query:
         return {**state, "error": "Empty query received"}
-    logger.info(f"[input_node] Query: {query}")
+    logger.info(f"[input_node] Query: {mask_pii(query[:80])}")
     return {**state, "query": query, "error": None}
 
 #------ Node 2: Session (Dummy for now) --------
@@ -53,7 +54,7 @@ def session_node(state: AgentState) -> AgentState:
 def retrieval_node(state: AgentState) -> AgentState:
     query = state["query"]
     retry_count = state.get("retry_count", 0)
-    logger.info(f"[retrieval_node] Retrieving chunks for: {query} (attempt {retry_count + 1}/3)")
+    logger.info(f"[retrieval_node] Retrieving chunks (attempt {retry_count + 1}/3)")
 
     # Widen search parameters on each retry
     human_threshold = max(0.40, 0.55 - (retry_count * 0.05))  # 0.55 → 0.50 → 0.45
@@ -150,7 +151,7 @@ Answer:"""
         )
 
         answer = response.choices[0].message.content.strip()
-        logger.info(f"[llm_node] Answer: {answer[:100]}...")
+        logger.info(f"[llm_node] Answer generated ({len(answer)} chars)")
         return {**state, "answer": answer}
     except Exception as e:
         logger.error(f"[llm_node] LLM call failed: {e}")

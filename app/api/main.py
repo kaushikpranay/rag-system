@@ -1,9 +1,9 @@
 import logging
+import re
 from app.escalation.sqs_worker import send_to_sqs
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from fastapi import Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, field_validator
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional
 from pathlib import Path
@@ -11,14 +11,26 @@ import uuid
 import sys
 import os
 
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.agent.graph import run_agent
 from app.retrieval.pgvector_client import get_connection
+from app.utils.sanitizer import sanitize_query, detect_prompt_injection, mask_pii
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="RAG Query Resolution System")
 
+# ─── Rate Limiter Setup ──────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI(title="RAG Query Resolution System")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ─── Security Headers Middleware ─────────────────────────────────────────────
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -32,9 +44,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+# ─── Request / Response Models ───────────────────────────────────────────────
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, v):
+        cleaned = sanitize_query(v)
+        if not cleaned:
+            raise ValueError("Query cannot be empty")
+        if len(cleaned) > 1000:
+            raise ValueError("Query exceeds maximum length of 1000 characters")
+        return cleaned
 
 class QueryResponse(BaseModel):
     session_id: str
@@ -43,14 +66,32 @@ class QueryResponse(BaseModel):
     confidence: str
     escalated: bool
 
+# ─── Endpoints ───────────────────────────────────────────────────────────────
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 @app.post("/query", response_model=QueryResponse)
-def resolve_query(request: QueryRequest):
+@limiter.limit("20/minute")
+def resolve_query(request: QueryRequest, req: Request):
     try:
         session_id = request.session_id or str(uuid.uuid4())
+
+        # Log with PII masked
+        logger.info(f"[query] session={session_id} query={mask_pii(request.query[:80])}")
+
+        # Check for prompt injection attempts
+        if detect_prompt_injection(request.query):
+            logger.warning(f"[query] Prompt injection blocked for session={session_id}")
+            return QueryResponse(
+                session_id=session_id,
+                query=request.query,
+                answer="I can only help with customer support questions. Please rephrase your question.",
+                confidence="blocked",
+                escalated=False
+            )
+
         result = run_agent(request.query, session_id)
         return QueryResponse(
             session_id=session_id,
@@ -64,17 +105,33 @@ def resolve_query(request: QueryRequest):
         raise HTTPException(status_code=500, detail="An internal error occurred. Please try again.")
 
 @app.post("/escalate")
-async def manual_escalate(request: QueryRequest):
-    send_to_sqs(request.session_id, request.query, "Manual escalation requested")
-    return {"escalated": True, "session_id": request.session_id}
+@limiter.limit("5/minute")
+def manual_escalate(request: QueryRequest, req: Request):
+    session_id = request.session_id or str(uuid.uuid4())
+
+    # Validate session_id format (must be a UUID)
+    try:
+        uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    send_to_sqs(session_id, request.query, "Manual escalation requested")
+    return {"escalated": True, "session_id": session_id}
 
 @app.get("/queue-status/{session_id}")
-async def queue_status(session_id: str, query: str = ""):
+@limiter.limit("30/minute")
+def queue_status(session_id: str, query: str = "", req: Request = None):
     """
     Check if a human-verified answer exists for a specific query.
     1. First checks this session's answers matching the exact query.
     2. Falls back to ANY session's answer matching the query (cross-user sharing).
     """
+    # Validate session_id format
+    try:
+        uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
     conn = get_connection()
     try:
         cur = conn.cursor()
