@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG System Deep Dive — Technical Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0b10;
+            --bg-secondary: #161821;
+            --accent: #4ecca3;
+            --text-primary: #e6edf3;
+            --text-secondary: #9198a1;
+            --border: #30363d;
+            --card-bg: rgba(22, 24, 33, 0.7);
+            --sidebar-width: 280px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            position: fixed;
+            padding: 2rem 1rem;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            padding-left: 0.5rem;
+        }
+
+        .sidebar nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar nav li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar nav a {
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            display: block;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .sidebar nav a:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent);
+        }
+
+        /* Main Content */
+        main {
+            margin-left: var(--sidebar-width);
+            padding: 4rem 10%;
+            width: 100%;
+            max-width: 1400px;
+        }
+
+        header {
+            margin-bottom: 4rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(90deg, #fff, #4ecca3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            max-width: 800px;
+        }
+
+        h2 {
+            font-size: 2rem;
+            margin-top: 4rem;
+            margin-bottom: 2rem;
+            color: var(--accent);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+
+        section {
+            margin-bottom: 4rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.05);
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 2rem;
+            border-radius: 12px;
+            margin: 1.5rem 0;
+            backdrop-filter: blur(10px);
+        }
+
+        .card p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Code */
+        pre {
+            margin: 1.5rem 0;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+        }
+
+        :not(pre)>code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        /* Images */
+        .img-container {
+            margin: 3rem 0;
+            text-align: center;
+        }
+
+        img {
+            max-width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .img-caption {
+            margin-top: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        /* Q&A Section */
+        .qa-item {
+            margin-bottom: 2rem;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 1.5rem;
+            border-radius: 10px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .question {
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .answer {
+            color: var(--text-secondary);
+        }
+
+        /* Utilities */
+        .badge {
+            background: var(--accent);
+            color: #000;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-right: 0.5rem;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 4rem 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 1000px) {
+            .sidebar {
+                display: none;
+            }
+
+            main {
+                margin-left: 0;
+                padding: 2rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <aside class="sidebar">
+        <h2>Navigation</h2>
+        <nav>
+            <ul>
+                <li><a href="#architecture">1. Architecture Overview</a></li>
+                <li><a href="#langgraph">2. LangGraph Agent</a></li>
+                <li><a href="#nodes">3. Node Deep Dive</a></li>
+                <li><a href="#pgvector">4. Vector Database</a></li>
+                <li><a href="#knowledge-sharing">5. Knowledge Sharing</a></li>
+                <li><a href="#dynamodb">6. Session Memory</a></li>
+                <li><a href="#escalation">7. Escalation Pipeline</a></li>
+                <li><a href="#ingestion">8. Ingestion Pipeline</a></li>
+                <li><a href="#security">9. Security</a></li>
+                <li><a href="#cicd">10. CI/CD Pipeline</a></li>
+                <li><a href="#polling">11. Frontend Polling</a></li>
+                <li><a href="#qa">12. Interview Q&A</a></li>
+            </ul>
+        </nav>
+    </aside>
+
+    <main>
+        <header>
+            <h1>RAG Query Resolution System</h1>
+            <p class="subtitle">A complete technical deep dive into an intelligent, multi-agent Retrieval-Augmented
+                Generation system for customer care.</p>
+        </header>
+
+        <section id="architecture">
+            <h2>1. System Architecture Overview</h2>
+            <div class="img-container">
+                <img src="/C:/Users/prana/.gemini/antigravity/brain/9530d8e2-439f-4bc9-8134-64338c1169ab/rag_architecture_1777859817372.png"
+                    alt="RAG System Architecture">
+                <p class="img-caption">High-level architecture showing User, API, LangGraph Agent, and AWS integrations.
+                </p>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Layer</th>
+                        <th>Technology</th>
+                        <th>Rationale</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>State Machine</td>
+                        <td>LangGraph</td>
+                        <td>Deterministic, debuggable control over agent flow via StateGraph.</td>
+                    </tr>
+                    <tr>
+                        <td>LLM</td>
+                        <td>Groq (Llama-3.1)</td>
+                        <td>Sub-200ms latency for real-time responsiveness.</td>
+                    </tr>
+                    <tr>
+                        <td>Embeddings</td>
+                        <td>AWS Bedrock Titan V2</td>
+                        <td>Managed, cost-effective 1024-dim vector generation.</td>
+                    </tr>
+                    <tr>
+                        <td>Vector DB</td>
+                        <td>RDS (pgvector)</td>
+                        <td>Unified relational + vector storage in a single AWS service.</td>
+                    </tr>
+                    <tr>
+                        <td>Memory</td>
+                        <td>DynamoDB</td>
+                        <td>Sub-ms performance with auto-TTL for session cleanup.</td>
+                    </tr>
+                    <tr>
+                        <td>Queue</td>
+                        <td>Amazon SQS</td>
+                        <td>Reliable decoupling for human escalation workflows.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="langgraph">
+            <h2>2. LangGraph Agent — The Core Brain</h2>
+            <div class="img-container">
+                <img src="/C:/Users/prana/.gemini/antigravity/brain/9530d8e2-439f-4bc9-8134-64338c1169ab/agent_flow_1777859830281.png"
+                    alt="Agent Flow Diagram">
+                <p class="img-caption">Step-by-step state machine flow showing the 3-attempt retry loop.</p>
+            </div>
+
+            <div class="card">
+                <h3>The AgentState Schema</h3>
+                <p>Every node in the graph communicates via a central state object:</p>
+                <pre><code class="language-python">class AgentState(TypedDict):
+    query: str                    # User's question
+    session_id: str               # UUID tracking
+    chat_history: List[dict]      # Context from DynamoDB
+    retrieved_chunks: List[dict]  # Vectors from pgvector
+    answer: str                   # Final LLM response
+    retry_count: int              # Attempt tracker (max 3)</code></pre>
+            </div>
+        </section>
+
+        <section id="nodes">
+            <h2>3. Node-by-Node Deep Dive</h2>
+
+            <div class="card">
+                <span class="badge">Adaptive Retrieval</span>
+                <h3>The Retrieval Strategy</h3>
+                <p>We implement a progressive search widening strategy. If the LLM lacks confidence, we loop back and
+                    fetch more content with lower similarity requirements.</p>
+                <table>
+                    <tr>
+                        <th>Attempt</th>
+                        <th>Similarity Threshold</th>
+                        <th>Top K</th>
+                    </tr>
+                    <tr>
+                        <td>1</td>
+                        <td>0.30</td>
+                        <td>5</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>0.20</td>
+                        <td>8</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>0.10</td>
+                        <td>11</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <span class="badge">Evaluation</span>
+                <h3>Low-Confidence Detection</h3>
+                <p>Instead of relying on LLM-generated scores, we use a robust list of 17 refusal phrases to trigger the
+                    retry or escalation flow.</p>
+                <pre><code class="language-python">phrases = ["not enough information", "cannot answer", "no relevant context"]
+refused = any(p in answer.lower() for p in phrases)</code></pre>
+            </div>
+        </section>
+
+        <section id="pgvector">
+            <h2>4. Vector Database — pgvector</h2>
+            <pre><code class="language-sql">-- Semantic Search Query
+SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
+FROM documents
+WHERE 1 - (embedding <=> %s::vector) > 0.3
+ORDER BY similarity DESC
+LIMIT 5;</code></pre>
+            <p>We leverage the <code><=></code> cosine distance operator in PostgreSQL to perform high-speed semantic
+                matching directly alongside our relational metadata.</p>
+        </section>
+
+        <section id="qa">
+            <h2>12. Interview Q&A — Deep Dive</h2>
+            <div class="qa-item">
+                <div class="question">Q: Why LangGraph instead of a simple LangChain agent?</div>
+                <div class="answer">LangChain agents are often unpredictable as they decide tool usage on the fly.
+                    LangGraph provides a deterministic state machine, allowing us to enforce specific retry logic, error
+                    handling, and manual escalation paths that are 100% reliable in a production customer care
+                    environment.</div>
+            </div>
+            <div class="qa-item">
+                <div class="question">Q: How do you handle cross-user knowledge sharing?</div>
+                <div class="answer">When a human agent verifies an answer, we embed only the query and store it in RDS
+                    with a 'human_verified' tag. Every new user query first searches this high-priority verified pool
+                    before falling back to general documentation, ensuring accurate answers are reused across the entire
+                    user base.</div>
+            </div>
+            <div class="qa-item">
+                <div class="question">Q: What is the average latency?</div>
+                <div class="answer">The typical end-to-end request takes between 350ms to 600ms. This includes DynamoDB
+                    history retrieval, Bedrock embedding generation, pgvector search, and Groq inference.</div>
+            </div>
+        </section>
+
+        <hr>
+        <footer style="text-align: center; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 4rem;">
+            &copy; 2026 RAG System Deep Dive Documentation. Created for Presentation.
+        </footer>
+    </main>
+
+    <script>hljs.highlightAll();</script>
+</body>
+
+</html>
