@@ -294,11 +294,41 @@
 
         <section id="architecture">
             <h2>1. System Architecture Overview</h2>
-            <div class="img-container">
-                <img src="/C:/Users/prana/.gemini/antigravity/brain/9530d8e2-439f-4bc9-8134-64338c1169ab/rag_architecture_1777859817372.png"
-                    alt="RAG System Architecture">
-                <p class="img-caption">High-level architecture showing User, API, LangGraph Agent, and AWS integrations.
-                </p>
+            <div class="card">
+                <pre style="background:transparent;border:none;white-space:pre;font-family:'Fira Code',monospace;font-size:0.85rem;line-height:1.5;color:var(--text-primary)">
+ ┌──────────────────┐        ┌──────────────────────┐
+ │  Chat (Vercel)   │        │  Dashboard (Vercel)  │
+ │  frontend/chat   │        │  frontend/dashboard  │
+ └────────┬─────────┘        └──────────┬───────────┘
+          │  HTTPS                      │  HTTPS
+          └──────────────┬──────────────┘
+                          ▼
+                ┌───────────────────┐
+                │  nginx (EC2:443)  │  TLS via Let's Encrypt
+                └─────────┬─────────┘
+                          ▼
+              ┌────────────────────────┐
+              │ uvicorn / FastAPI :8000│  supervisord-managed
+              │   app/api/main.py      │
+              └───────────┬────────────┘
+                          │
+        ┌─────────────────┼──────────────────┬───────────────┐
+        ▼                 ▼                  ▼               ▼
+ ┌─────────────┐  ┌───────────────┐  ┌───────────────┐ ┌────────────┐
+ │ LangGraph   │  │ RDS Postgres  │  │  DynamoDB     │ │    SQS     │
+ │ Agent       │  │  + pgvector   │  │ session memory│ │ escalations│
+ │ (Groq LLM)  │  └───────────────┘  └───────────────┘ └─────┬──────┘
+ └──────┬──────┘                                             │
+        ▼                                                    ▼
+ ┌─────────────┐                                     ┌────────────────┐
+ │ Bedrock     │                                     │ Human agent    │
+ │ embeddings  │                                     │ resolves via   │
+ └─────────────┘                                     │ dashboard API  │
+                                                       └────────────────┘
+ S3 — raw PDF storage, pulled by app/ingestion/pipeline.py</pre>
+                <p class="img-caption">Deployment + data-flow topology: two Vercel-hosted React frontends talk over
+                    HTTPS to a single FastAPI backend on EC2 (behind nginx), which fans out to LangGraph/Groq for
+                    inference and to RDS/DynamoDB/SQS/S3 for storage.</p>
             </div>
 
             <table>
@@ -346,10 +376,24 @@
 
         <section id="langgraph">
             <h2>2. LangGraph Agent — The Core Brain</h2>
-            <div class="img-container">
-                <img src="/C:/Users/prana/.gemini/antigravity/brain/9530d8e2-439f-4bc9-8134-64338c1169ab/agent_flow_1777859830281.png"
-                    alt="Agent Flow Diagram">
-                <p class="img-caption">Step-by-step state machine flow showing the 3-attempt retry loop.</p>
+            <div class="card">
+                <pre style="background:transparent;border:none;white-space:pre;font-family:'Fira Code',monospace;font-size:0.85rem;line-height:1.5;color:var(--text-primary)">
+   ┌───────┐     ┌───────────┐     ┌────────────┐     ┌──────────┐
+   │ START │ ──▶ │ retrieve  │ ──▶ │  generate  │ ──▶ │ evaluate │
+   └───────┘     └───────────┘     └────────────┘     └────┬─────┘
+                       ▲                                    │
+                       │            retry_count < 3         │
+                       └────────────────────────────────────┘
+                                                              │ confident / retry_count == 3
+                                                              ▼
+                                                        ┌────────────┐
+                                                        │  escalate  │──▶ SQS
+                                                        │ (if needed)│
+                                                        └─────┬──────┘
+                                                              ▼
+                                                            END</pre>
+                <p class="img-caption">Step-by-step state machine flow showing the 3-attempt retry loop before falling
+                    through to escalation.</p>
             </div>
 
             <div class="card">
@@ -417,6 +461,98 @@ ORDER BY similarity DESC
 LIMIT 5;</code></pre>
             <p>We leverage the <code><=></code> cosine distance operator in PostgreSQL to perform high-speed semantic
                 matching directly alongside our relational metadata.</p>
+        </section>
+
+        <section id="knowledge-sharing">
+            <h2>5. Cross-User Knowledge Sharing</h2>
+            <p>Implemented in <code>GET /queue-status/{session_id}</code> (<code>app/api/main.py</code>). Every poll checks
+                two tiers, in order:</p>
+            <ol>
+                <li><strong>Session match:</strong> a row in <code>documents</code> tagged
+                    <code>metadata->>'source' = 'human_verified'</code> for this exact <code>session_id</code> and query.</li>
+                <li><strong>Cross-session fallback:</strong> if none, any row with the same query text
+                    (case-insensitive) verified for <em>any other session</em> — so once one user's escalation is
+                    resolved, every other user asking the same thing gets the answer instantly, no re-escalation needed.</li>
+            </ol>
+        </section>
+
+        <section id="dynamodb">
+            <h2>6. Session Memory — DynamoDB</h2>
+            <p><code>app/memory/dynamodb_client.py</code> stores conversation history per session in a single table
+                (<code>rag-session-memory</code>, keyed by <code>session_id</code>):</p>
+            <ul>
+                <li><code>get_session</code> reads the <code>history</code> list attribute (query/answer/timestamp
+                    entries).</li>
+                <li><code>save_session</code> appends a new turn and rewrites the item with a 24-hour
+                    <code>expires_at</code> TTL, so DynamoDB auto-expires stale sessions.</li>
+                <li>Verified escalation answers are also written back here (prefixed
+                    <code>[VERIFIED BY AGENT]</code>) so the chat's memory reflects the human-approved answer.</li>
+            </ul>
+        </section>
+
+        <section id="escalation">
+            <h2>7. Escalation Pipeline — SQS</h2>
+            <p><code>app/escalation/sqs_worker.py</code> wraps a single SQS queue with four operations:
+                <code>send_to_sqs</code> (agent pushes a low-confidence query), <code>receive_from_sqs</code> (dashboard
+                polls up to N messages), <code>delete_from_sqs</code> (message removed once an agent resolves it), and
+                <code>get_queue_depth</code> (powers the dashboard's live queue counter).</p>
+            <p>Resolution (<code>POST /dashboard/escalations/resolve</code>) is a 3-way write: the verified answer goes
+                into pgvector (<code>store_verified_answer</code>), archived to S3
+                (<code>archive_verified_answer</code>), and written into the session's DynamoDB history — then the SQS
+                message is deleted.</p>
+        </section>
+
+        <section id="ingestion">
+            <h2>8. Document Ingestion Pipeline</h2>
+            <p><code>app/ingestion/pipeline.py</code> is a standalone script (<code>python -m app.ingestion.pipeline</code>):
+                it lists PDFs under the <code>raw-documents/</code> prefix in S3, downloads each to a temp dir, parses it
+                with <code>PyPDFLoader</code>, splits it with <code>RecursiveCharacterTextSplitter</code>
+                (chunk size 1000, overlap 100), and embeds/stores the chunks via <code>store_chunks</code> into pgvector.
+                This is how the base knowledge corpus gets seeded, independent of the human-verified answers written at
+                runtime.</p>
+        </section>
+
+        <section id="security">
+            <h2>9. Security Hardening</h2>
+            <ul>
+                <li><strong>Headers:</strong> <code>SecurityHeadersMiddleware</code> in <code>main.py</code> sets
+                    <code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>,
+                    <code>Strict-Transport-Security</code>, a restrictive <code>Content-Security-Policy</code>, and
+                    <code>Referrer-Policy: no-referrer</code> on every response.</li>
+                <li><strong>CORS:</strong> <code>CORSMiddleware</code> only allows the exact origins listed in the
+                    <code>FRONTEND_ORIGINS</code> env var (the two Vercel URLs in production) — anything else is
+                    rejected at preflight.</li>
+                <li><strong>Rate limiting:</strong> <code>slowapi</code> caps <code>/query</code> at 20/min,
+                    <code>/escalate</code> at 5/min, dashboard <code>/escalations</code> at 30/min and
+                    <code>/escalations/resolve</code> at 10/min per client.</li>
+                <li><strong>Input handling:</strong> <code>app/utils/sanitizer.py</code> strips/validates queries
+                    (<code>sanitize_query</code>), flags prompt-injection attempts before they reach the LLM
+                    (<code>detect_prompt_injection</code>), and masks PII in logs (<code>mask_pii</code>).</li>
+                <li><strong>Dashboard auth:</strong> a single shared password hash (<code>DASHBOARD_PASSWORD_HASH</code>)
+                    checked via <code>POST /dashboard/login</code>, then required as a Bearer token on every other
+                    dashboard route.</li>
+            </ul>
+        </section>
+
+        <section id="cicd">
+            <h2>10. CI/CD Pipeline</h2>
+            <p><strong>Backend:</strong> <code>.github/workflows/ci.yml</code> runs <code>pytest</code> on every push/PR.
+                On success on <code>main</code>, <code>cd.yml</code> triggers, SSHs into the EC2 box, does
+                <code>git pull origin main</code>, reinstalls <code>requirements.txt</code>, and restarts the service
+                with <code>supervisorctl restart fastapi</code> — nginx in front handles TLS termination and reverse
+                proxying to uvicorn on port 8000.</p>
+            <p><strong>Frontends:</strong> <code>frontend/chat</code> and <code>frontend/dashboard</code> are each a
+                separate Vercel project connected to the same GitHub repo — a push to <code>main</code> auto-triggers a
+                Vercel build/deploy for both, independent of the backend's EC2 pipeline.</p>
+        </section>
+
+        <section id="polling">
+            <h2>11. Frontend Polling</h2>
+            <p><code>frontend/chat/src/hooks/usePolling.js</code> polls <code>GET /queue-status</code> every 5 seconds
+                (<code>POLL_INTERVAL_MS</code>) for each pending escalation, up to 60 attempts
+                (<code>MAX_POLLS</code> — a 5-minute ceiling) before giving up and firing <code>onTimeout</code>. As soon
+                as <code>in_queue</code> flips false with an answer, <code>onResolved</code> fires and the interval is
+                cleared once every pending query is settled — no websockets needed for this polling cadence.</p>
         </section>
 
         <section id="qa">

@@ -19,9 +19,10 @@ An intelligent, multi-agent Retrieval-Augmented Generation (RAG) system built fo
 *   **Vector Database:** Amazon RDS (PostgreSQL with `pgvector`)
 *   **Session Memory:** Amazon DynamoDB
 *   **Message Queue:** Amazon SQS (Escalations)
+*   **Archival:** Amazon S3
 *   **Backend:** FastAPI
-*   **Frontend Chat:** Vanilla HTML/JS (served via FastAPI)
-*   **Agent Dashboard:** Streamlit
+*   **Chat Frontend:** React + Vite (`frontend/chat`), hosted on Vercel
+*   **Agent Dashboard:** React + Vite (`frontend/dashboard`), hosted on Vercel — backed by the FastAPI `dashboard` router (password-protected)
 
 ## 📂 Directory Structure
 
@@ -29,15 +30,19 @@ An intelligent, multi-agent Retrieval-Augmented Generation (RAG) system built fo
 rag-system/
 ├── app/
 │   ├── agent/         # LangGraph state machine and node definitions
-│   ├── api/           # FastAPI backend routes and endpoints
-│   ├── dashboard/     # Streamlit human agent UI and Chat HTML
+│   ├── api/           # FastAPI app, routes (main.py), dashboard router (dashboard.py)
+│   ├── archive/        # S3 archival client
 │   ├── escalation/    # SQS queue producer/consumer logic
 │   ├── ingestion/     # PDF parsing and embedding pipeline
 │   ├── memory/        # DynamoDB session state management
 │   ├── retrieval/     # pgvector queries and semantic similarity
+│   ├── summarizer/    # Query/escalation summarization helpers
 │   └── utils/         # Config loaders and environment helpers
+├── frontend/
+│   ├── chat/          # React/Vite end-user chat UI (deployed to Vercel)
+│   └── dashboard/     # React/Vite human-agent dashboard UI (deployed to Vercel)
 ├── tests/             # Pytest test suites
-├── .github/workflows/ # CI/CD deployment to AWS EC2
+├── .github/workflows/ # ci.yml (tests), cd.yml (deploy backend to AWS EC2)
 └── requirements.txt   # Python dependencies
 ```
 
@@ -45,8 +50,9 @@ rag-system/
 
 ### 1. Prerequisites
 *   Python 3.11+
+*   Node.js (for the `frontend/chat` and `frontend/dashboard` apps)
 *   PostgreSQL with the `pgvector` extension installed
-*   AWS Account (for Bedrock, DynamoDB, SQS)
+*   AWS Account (for Bedrock, RDS, DynamoDB, SQS, S3)
 *   Groq API Key
 
 ### 2. Environment Variables
@@ -54,11 +60,15 @@ Copy `.env.example` to `.env` and fill in the required credentials:
 ```bash
 cp .env.example .env
 ```
-Ensure you provide your `GROQ_API_KEY`, AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`), and `RDS_*` connection details.
+Ensure you provide your `GROQ_API_KEY`, AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`), `RDS_*` connection details, and `FRONTEND_ORIGINS` (comma-separated list of allowed frontend origins for CORS).
+
+Each frontend also has its own `.env.example` (`frontend/chat/.env.example`, `frontend/dashboard/.env.example`) — copy it to `.env` and set `VITE_API_BASE_URL` to your backend URL.
 
 ### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
+cd frontend/chat && npm install
+cd ../dashboard && npm install
 ```
 
 ### 4. Database Setup
@@ -66,20 +76,27 @@ The application uses PostgreSQL with `pgvector`. The `pgvector_client.py` will a
 
 ## 🚀 Running the System
 
-### Start the FastAPI Backend (User Chat)
-Serves the API and the end-user chat interface.
+### Start the FastAPI Backend
 ```bash
 uvicorn app.api.main:app --reload
 ```
-*The chat interface will be available at `http://localhost:8000/`*
+*The API will be available at `http://localhost:8000/`*
 
-### Start the Streamlit Dashboard (Human Agent UI)
-Used by support agents to view escalated queries and provide verified answers.
+### Start the Chat Frontend
 ```bash
-streamlit run app/dashboard/streamlit_app.py
+cd frontend/chat
+npm run dev
 ```
-*The dashboard will be available at `http://localhost:8501/`*
+
+### Start the Agent Dashboard
+```bash
+cd frontend/dashboard
+npm run dev
+```
+Both dev servers point at `VITE_API_BASE_URL` (default `http://localhost:8000`) from their respective `.env`.
 
 ## 🔄 Deployment
 
-This project uses a GitHub Actions workflow (`deploy.yml`) to automatically test and deploy the `main` branch to an AWS EC2 instance. The pipeline runs `pytest` and, on success, pulls the latest code and restarts the FastAPI and Streamlit supervisor services via SSH.
+*   **Backend:** `.github/workflows/ci.yml` runs `pytest` on every push/PR. On success on `main`, `.github/workflows/cd.yml` SSHs into an AWS EC2 instance, `git pull`s, reinstalls dependencies, and restarts the FastAPI service via `supervisorctl`. Nginx reverse-proxies port 80/443 to uvicorn on port 8000.
+*   **Frontends:** `frontend/chat` and `frontend/dashboard` are each deployed as separate Vercel projects, connected to this GitHub repo — pushing to `main` triggers an automatic Vercel rebuild/redeploy. Set `VITE_API_BASE_URL` in each Vercel project's environment variables to the backend's public HTTPS URL.
+*   **CORS:** the backend's `FRONTEND_ORIGINS` env var must list the exact Vercel URLs (e.g. `https://your-chat.vercel.app,https://your-dashboard.vercel.app`) or the frontends will be blocked by CORS.
