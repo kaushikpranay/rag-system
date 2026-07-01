@@ -13,9 +13,11 @@ export function ChatWindow({ messages }) {
 
   return (
     <div id="chat-box" ref={boxRef}>
-      {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} />
-      ))}
+      {messages.length === 0 ? (
+        <div className="chat-empty">Ask me anything about the system</div>
+      ) : (
+        messages.map((m) => <MessageBubble key={m.id} message={m} />)
+      )}
     </div>
   )
 }

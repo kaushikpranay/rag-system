@@ -15,7 +15,7 @@ function App() {
 
   const addMessage = useCallback((message) => {
     const id = nextId.current++
-    setMessages((prev) => [...prev, { id, ...message }])
+    setMessages((prev) => [...prev, { id, timestamp: Date.now(), ...message }])
     return id
   }, [])
 
@@ -45,6 +45,7 @@ function App() {
         text: data.answer || 'No response.',
         confidence: data.confidence,
         escalated: data.escalated,
+        sources: data.sources,
         loading: false,
       })
       if (data.escalated) startPolling(query)
@@ -64,17 +65,25 @@ function App() {
 
   return (
     <div className="chat-app">
-      <div className="header">
-        <h1>🔍 RAG Query System</h1>
-        <p>Ask anything related to our System</p>
-      </div>
+      <header className="header">
+        <div className="header-icon">🔍</div>
+        <div className="header-text">
+          <h1>RAG Query System</h1>
+          <p>Ask anything related to our system</p>
+        </div>
+        <div className="header-status">
+          <span className="status-dot" />
+          System Online
+        </div>
+      </header>
 
       <div className="chat-wrapper">
         <ChatWindow messages={messages} />
-        <QueryInput onSend={handleSend} disabled={sending} />
+        <div className="input-row">
+          <EscalationPanel chatHistory={chatHistory} onEscalate={handleEscalate} />
+          <QueryInput onSend={handleSend} disabled={sending} />
+        </div>
       </div>
-
-      <EscalationPanel chatHistory={chatHistory} onEscalate={handleEscalate} />
     </div>
   )
 }

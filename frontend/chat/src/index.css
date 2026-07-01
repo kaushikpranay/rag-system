@@ -1,3 +1,23 @@
+:root {
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef0ff;
+  --accent-ring: rgba(79, 70, 229, 0.35);
+
+  --bg: #f7f7f9;
+  --surface: #ffffff;
+  --border: #e3e2e8;
+  --text: #1f1f27;
+  --text-muted: #6b6b76;
+
+  --good: #0f8a4c;
+  --good-bg: #e6f7ee;
+  --warn: #a06a00;
+  --warn-bg: #fff6e0;
+  --bad: #b3261e;
+  --bad-bg: #fdeceb;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -5,8 +25,15 @@
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
 }
 
 #root {
   min-height: 100svh;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

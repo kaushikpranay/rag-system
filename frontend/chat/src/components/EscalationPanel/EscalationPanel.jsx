@@ -29,7 +29,9 @@ export function EscalationPanel({ chatHistory, onEscalate }) {
 
   return (
     <>
-      <button id="ask-human-btn" onClick={togglePanel}>🙋 Ask Human</button>
+      <button id="ask-human-btn" onClick={togglePanel} data-tooltip="Ask a human expert">
+        🙋
+      </button>
 
       <div id="escalate-panel" className={isOpen ? 'open' : ''}>
         <p className="panel-title">Ask a Human Expert</p>
