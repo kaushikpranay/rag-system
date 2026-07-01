@@ -1,0 +1,28 @@
+.login-gate {
+  max-width: 320px;
+  margin: 15vh auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-gate input {
+  padding: 10px 12px;
+  border: 1px solid #d8d8dc;
+  border-radius: 6px;
+}
+
+.login-gate button {
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #f5a623;
+  color: #0f1117;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-error {
+  color: #c0392b;
+  font-size: 0.85rem;
+}

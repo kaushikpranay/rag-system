@@ -1,0 +1,40 @@
+.input-bar {
+  display: flex;
+  border: 1px solid #e5e4e7;
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  padding: 12px;
+  gap: 10px;
+}
+
+#query-input {
+  flex: 1;
+  border: 1px solid #d8d8dc;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 10px 14px;
+  outline: none;
+}
+
+#query-input:focus {
+  border-color: #7c83fd;
+}
+
+#send-btn {
+  background: #7c83fd;
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 10px 22px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

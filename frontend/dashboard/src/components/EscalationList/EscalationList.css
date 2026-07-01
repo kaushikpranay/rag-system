@@ -1,0 +1,14 @@
+.escalation-empty {
+  text-align: center;
+  padding: 60px 0;
+  opacity: 0.5;
+}
+
+.escalation-empty .icon {
+  font-size: 40px;
+}
+
+.escalation-empty .hint {
+  font-size: 13px;
+  margin-top: 6px;
+}

@@ -41,15 +41,28 @@ def receive_from_sqs(max_messages: int=10)-> list:
         print(f"[sqs] receive_from_sqs error: {e}")
         return []
 
-def delete_from_sqs(receipt_handle: str)-> None:
+def delete_from_sqs(receipt_handle: str) -> bool:
     try:
         sqs.delete_message(
             QueueUrl=SQS_QUEUE_URL,
             ReceiptHandle=receipt_handle
         )
         print(f"[sqs] Message deleted")
+        return True
     except Exception as e:
         print(f"[sqs] delete_from_sqs error: {e}")
+        return False
+
+def get_queue_depth() -> int:
+    try:
+        resp = sqs.get_queue_attributes(
+            QueueUrl=SQS_QUEUE_URL,
+            AttributeNames=["ApproximateNumberOfMessages"]
+        )
+        return int(resp["Attributes"].get("ApproximateNumberOfMessages", 0))
+    except Exception as e:
+        print(f"[sqs] get_queue_depth error: {e}")
+        return -1
         
 
         

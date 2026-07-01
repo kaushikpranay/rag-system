@@ -3,32 +3,41 @@ import re
 from app.escalation.sqs_worker import send_to_sqs
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, field_validator
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional
-from pathlib import Path
 import uuid
 import sys
 import os
 
 # Rate limiting
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.agent.graph import run_agent
 from app.retrieval.pgvector_client import get_connection
 from app.utils.sanitizer import sanitize_query, detect_prompt_injection, mask_pii
+from app.api.rate_limit import limiter
+from app.api.dashboard import router as dashboard_router
 
 logger = logging.getLogger(__name__)
 
 # ─── Rate Limiter Setup ──────────────────────────────────────────────────────
-limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="RAG Query Resolution System")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ─── CORS (React frontends, hosted separately from this API) ────────────────
+FRONTEND_ORIGINS = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 # ─── Security Headers Middleware ─────────────────────────────────────────────
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -43,6 +52,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+app.include_router(dashboard_router, prefix="/dashboard")
 
 # ─── Request / Response Models ───────────────────────────────────────────────
 class QueryRequest(BaseModel):
@@ -167,10 +178,3 @@ def queue_status(request: Request, session_id: str, query: str = ""):
     if row:
         return {"in_queue": False, "answer": row[0]}
     return {"in_queue": True, "answer": None}
-
-CHAT_HTML_PATH = Path(__file__).parent.parent / "dashboard" / "chat.html"
-
-@app.get("/", response_class=HTMLResponse)
-async def chat_ui():
-    with open(CHAT_HTML_PATH, "r") as f:
-        return f.read()

@@ -81,6 +81,39 @@ def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) ->
 
 
 
+def store_verified_answer(query: str, answer: str, session_id: str = "") -> bool:
+    """Store a human-verified Q&A as a new embedding, same shape used by search_human_verified/queue-status."""
+    from datetime import datetime, timezone
+    text_to_store = f"Q: {query}\nA: {answer}"
+    embedding = get_bedrock_embedding(query)  # embed only the query, matching retrieval
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO documents (content, metadata, embedding) VALUES (%s, %s, %s)",
+            (
+                text_to_store,
+                json.dumps({
+                    "source": "human_verified",
+                    "query": query,
+                    "session_id": session_id,
+                    "verified_at": datetime.now(timezone.utc).isoformat(),
+                }),
+                embedding,
+            ),
+        )
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        logger.error(f"[pgvector] store_verified_answer error: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def search_human_verified(query: str, top_k: int = 3):
     conn = get_connection()
     cur = conn.cursor()

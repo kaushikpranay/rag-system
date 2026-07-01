@@ -19,9 +19,6 @@ pgvector
 # Security
 slowapi==0.1.9
 
-# Dashboard
-streamlit
-
 # Utilities
 python-dotenv
 pypdf
