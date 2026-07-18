@@ -2,9 +2,22 @@ import boto3
 import os
 
 def get_secret(name: str) -> str:
-    ssm = boto3.client('ssm', region_name='us-east-1')
-    response = ssm.get_parameter(Name=name, WithDecryption=True)
-    return response['Parameter']['Value']
+    # Allow reading directly from env variables (e.g. RDS_PASSWORD for /rag-system/RDS_PASSWORD)
+    env_name = name.split('/')[-1]
+    env_val = os.getenv(env_name)
+    if env_val:
+        return env_val
+
+    try:
+        ssm = boto3.client('ssm', region_name=os.getenv("AWS_REGION", "us-east-1"))
+        response = ssm.get_parameter(Name=name, WithDecryption=True)
+        return response['Parameter']['Value']
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to retrieve secret '{name}' from environment variable '{env_name}' "
+            f"and AWS SSM fallback failed: {str(e)}"
+        ) from e
+
 
 # AWS
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
