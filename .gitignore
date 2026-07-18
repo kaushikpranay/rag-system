@@ -8,5 +8,9 @@ node_modules/
 dist/
 graphify-out/
 .tokensave/
+.tokensaver/
 .claude/
 .agent/
+pytest-cache-files*/
+PROJECT_CONTEXT.txt
+PROJECT_CONTEXT_FULL.txt

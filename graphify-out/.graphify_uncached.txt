@@ -1,3 +1,0 @@
-README.md
-requirements.txt
-app\dashboard\chat.html
