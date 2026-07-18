@@ -6,3 +6,7 @@ venv/
 .venv_dev/
 node_modules/
 dist/
+graphify-out/
+.tokensave/
+.claude/
+.agent/
