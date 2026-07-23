@@ -1,0 +1,92 @@
+[
+  {
+    "query": "Which vector stores are recommended for storing high-dimensional vector embeddings?",
+    "expected_chunk_substring": "vector stores like Deep Lake, Pinecone, and Chroma",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How do you extract TF-IDF features and compute cosine similarity in Python?",
+    "expected_chunk_substring": "TfidfVectorizer imports the class that converts text documents into a matrix of TF-IDF features",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What temperature parameter setting is recommended for precise, less creative model responses?",
+    "expected_chunk_substring": "temperature=0.1  # Add the temperature parameter here",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How is K-Means clustering initialized with 2 clusters in scikit-learn?",
+    "expected_chunk_substring": "kmeans = KMeans(n_clusters=2, n_init=10, random_state=0)",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What python package version is used to interact with the Wikipedia API?",
+    "expected_chunk_substring": "pip install Wikipedia-API==0.6.0",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How does human feedback adapt a RAG ecosystem?",
+    "expected_chunk_substring": "Human feedback (HF) can be added to the input, as described in the Human feedback",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What steps take place during the data collection and feature representation phase of multimodal processing?",
+    "expected_chunk_substring": "data can be chunked (broken into smaller parts), embedded (transformed into vectors), and indexed",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How can model fine-tuning be combined with domain-specific data?",
+    "expected_chunk_substring": "fine-tune (T2) the model with domain-specific data",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "Where can I find the starter Jupyter notebook for RAG overview and foundations?",
+    "expected_chunk_substring": "open RAG_Overview.ipynb in the GitHub repository",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What sample query is used to test GPT-4o's response to defining a RAG store?",
+    "expected_chunk_substring": "query = \"define a rag store\"",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What function calculates cosine similarity between preprocessed and synonym-expanded texts?",
+    "expected_chunk_substring": "calculate_enhanced_similarity(text1, text2) function takes two texts and ultimately returns the cosine similarity score",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "Why is using a vector index preferred over searching through hundreds of raw document sentences with keywords?",
+    "expected_chunk_substring": "Using an index will reduce the computational load to just a fraction of the total data",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How is augmented input formatted when combining a user query with a retrieved record?",
+    "expected_chunk_substring": "augmented_input=query+\": \"+best_matching_record",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How are textual queries mapped to source node images in multimodal datasets using LlamaIndex?",
+    "expected_chunk_substring": "running a query on the VisDrone multimodal dataset",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "Where is the official guide for OpenAI model fine-tuning located?",
+    "expected_chunk_substring": "https://platform.openai.com/docs/guides/fine-tuning/",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "How are Pinecone query results formatted and printed along with response time?",
+    "expected_chunk_substring": "print(f\"Querying response time: {response_time:.2f} seconds\")",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What library imports OpenAI client and model initialization settings in Python?",
+    "expected_chunk_substring": "gptmodel=\"gpt-4o\"",
+    "min_acceptable_similarity": null
+  },
+  {
+    "query": "What vector embedding size and model are used for transforming raw text into high-dimensional vectors?",
+    "expected_chunk_substring": "fed into a model such as OpenAI text-embedding-3-small",
+    "min_acceptable_similarity": null
+  }
+]
