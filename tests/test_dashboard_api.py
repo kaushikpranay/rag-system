@@ -9,14 +9,12 @@ import boto3
 os.environ.setdefault("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/000000000000/fake")
 os.environ.setdefault("S3_BUCKET_NAME", "fake-bucket")
 os.environ.setdefault("DYNAMODB_TABLE", "fake-table")
-os.environ.setdefault("RDS_HOST", "localhost")
-os.environ.setdefault("RDS_DB", "ragdb")
-os.environ.setdefault("RDS_USER", "test")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 
 FAKE_PASSWORD_HASH = "fake-/rag-system/DASHBOARD_PASSWORD_HASH"
+os.environ["DASHBOARD_PASSWORD_HASH"] = FAKE_PASSWORD_HASH
 _real_client = boto3.client
 
 

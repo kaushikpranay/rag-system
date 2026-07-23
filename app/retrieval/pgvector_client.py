@@ -1,8 +1,11 @@
 import os
 import logging
+import time
+import hashlib
 import psycopg2
 import boto3
 import json
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from pgvector.psycopg2 import register_vector
 load_dotenv()
@@ -19,7 +22,43 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 # Reuse a single Bedrock client instead of creating one per-call
 _bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
 
+_db_initialized = False
+
+def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
+    try:
+        conn = psycopg2.connect(
+            host=RDS_HOST, port=RDS_PORT,
+            dbname=RDS_DB, user=RDS_USER,
+            password=RDS_PASSWORD
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS documents (
+                id BIGSERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                metadata JSONB,
+                embedding vector(1024),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_metadata_source ON documents ((metadata->>'source'));")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_metadata_session_id ON documents ((metadata->>'session_id'));")
+        cur.close()
+        conn.close()
+        _db_initialized = True
+        logger.info("[pgvector] Database schema initialized successfully (vector extension & documents table).")
+    except Exception as e:
+        logger.error(f"[pgvector] Database initialization failed: {e}")
+        raise
+
 def get_connection():
+    if not _db_initialized:
+        init_db()
     conn = psycopg2.connect(
         host=RDS_HOST, port=RDS_PORT,
         dbname=RDS_DB, user=RDS_USER,
@@ -30,15 +69,34 @@ def get_connection():
     return conn
 
 def get_bedrock_embedding(text: str) -> list:
-    body = json.dumps({"inputText": text})
-    response = _bedrock_client.invoke_model(
-        modelId="amazon.titan-embed-text-v2:0",
-        contentType="application/json",
-        accept="application/json",
-        body=body
-    )
-    result = json.loads(response["body"].read())
-    return result["embedding"]
+    if len(text) == 0:
+        logger.warning("[pgvector] Empty text passed to get_bedrock_embedding, skipping Bedrock call.")
+        return []
+
+    delays = [1, 2, 4]
+    max_retries = len(delays)
+    for attempt in range(max_retries + 1):
+        try:
+            body = json.dumps({"inputText": text})
+            response = _bedrock_client.invoke_model(
+                modelId="amazon.titan-embed-text-v2:0",
+                contentType="application/json",
+                accept="application/json",
+                body=body
+            )
+            result = json.loads(response["body"].read())
+            return result["embedding"]
+        except ClientError as e:
+            if attempt < max_retries:
+                delay = delays[attempt]
+                logger.warning(
+                    f"[pgvector] Bedrock invoke_model failed with ClientError ({e}). "
+                    f"Retrying in {delay}s (attempt {attempt + 1}/{max_retries})..."
+                )
+                time.sleep(delay)
+            else:
+                logger.error(f"[pgvector] Bedrock invoke_model failed after {max_retries} retries: {e}")
+                raise
 
 def store_chunks(chunks: list):
     conn = get_connection()
@@ -48,10 +106,25 @@ def store_chunks(chunks: list):
         clean_text = chunk.page_content.replace('\x00', '').strip()
         if not clean_text:
             continue  # skip empty chunks
+
+        content_hash = hashlib.sha256(clean_text.encode("utf-8")).hexdigest()
+
+        cur.execute("SELECT 1 FROM documents WHERE metadata->>'content_hash' = %s LIMIT 1", (content_hash,))
+        if cur.fetchone():
+            logger.warning(f"[pgvector] Duplicate chunk skipped (content_hash={content_hash[:8]}...)")
+            continue
+
         embedding = get_bedrock_embedding(clean_text)
+        if not embedding:
+            logger.warning(f"[pgvector] Empty embedding returned for chunk, skipping insertion: {clean_text[:50]}...")
+            continue
+
+        metadata = dict(chunk.metadata) if chunk.metadata else {}
+        metadata["content_hash"] = content_hash
+
         cur.execute(
             "INSERT INTO documents (content, metadata, embedding) VALUES (%s, %s, %s)",
-            (clean_text, json.dumps(chunk.metadata), embedding)
+            (clean_text, json.dumps(metadata), embedding)
         )
         stored += 1
     conn.commit()

@@ -18,15 +18,25 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.agent.graph import run_agent
-from app.retrieval.pgvector_client import get_connection
+from contextlib import asynccontextmanager
+from app.retrieval.pgvector_client import get_connection, init_db
 from app.utils.sanitizer import sanitize_query, detect_prompt_injection, mask_pii
 from app.api.rate_limit import limiter
 from app.api.dashboard import router as dashboard_router
 
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        init_db()
+        logger.info("Database initialized successfully at app startup.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database at startup: {e}")
+    yield
+
 # ─── Rate Limiter Setup ──────────────────────────────────────────────────────
-app = FastAPI(title="RAG Query Resolution System")
+app = FastAPI(title="RAG Query Resolution System", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
