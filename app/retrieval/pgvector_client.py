@@ -12,11 +12,11 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-RDS_HOST = os.getenv("RDS_HOST")
+RDS_HOST = os.getenv("RDS_HOST", "localhost")
 RDS_PORT = os.getenv("RDS_PORT", 5432)
 RDS_DB = os.getenv("RDS_DB", "ragdb")
 RDS_USER = os.getenv("RDS_USER", "ragadmin")
-RDS_PASSWORD = os.getenv("RDS_PASSWORD")
+RDS_PASSWORD = os.getenv("RDS_PASSWORD", "")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 # Reuse a single Bedrock client instead of creating one per-call

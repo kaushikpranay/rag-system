@@ -8,6 +8,20 @@ load_dotenv(override=True)
 from app.retrieval.pgvector_client import get_connection, init_db
 
 def test_database_schema_and_connection():
+    rds_host = os.getenv("RDS_HOST", "localhost")
+    try:
+        conn_test = psycopg2.connect(
+            host=rds_host,
+            port=os.getenv("RDS_PORT", 5432),
+            dbname=os.getenv("RDS_DB", "ragdb"),
+            user=os.getenv("RDS_USER", "ragadmin"),
+            password=os.getenv("RDS_PASSWORD", ""),
+            connect_timeout=3
+        )
+        conn_test.close()
+    except psycopg2.OperationalError:
+        pytest.skip(f"Database at {rds_host} is not reachable in this environment (e.g. CI runner)")
+
     # Ensure init_db runs cleanly
     init_db()
     
