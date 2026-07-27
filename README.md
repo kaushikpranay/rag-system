@@ -1,70 +1,99 @@
 # RAG Query Resolution System
 
-An intelligent, multi-agent Retrieval-Augmented Generation (RAG) system built for customer care and automated support. The system uses a LangGraph-powered state machine to intelligently retrieve documents, answer user queries, and seamlessly escalate complex issues to human agents when confidence is low.
+An intelligent Retrieval-Augmented Generation (RAG) system built for customer support automation. It uses a LangGraph state machine to retrieve relevant documents, answer user queries, and escalate unanswered questions to human agents when needed.
 
-## 🚀 Features
+## Key Features
 
-*   **Intelligent Retrieval Loop:** LangGraph agent automatically retries searches up to 3 times with progressively wider parameters (`top_k`, `min_sim`) if the initial answer is low-confidence.
-*   **Human-in-the-loop Escalation:** Queries the LLM can't answer are automatically escalated to a human agent via Amazon SQS.
-*   **Cross-User Knowledge Sharing:** Human-verified answers are embedded and stored in the vector database, instantly becoming available to *all* future users asking similar questions.
-*   **Dynamic Chat Memory:** Session context is stored in DynamoDB, allowing natural follow-up questions without needing to explicitly reference previous context.
-*   **Real-time Polling:** The chat interface actively polls for human-agent responses and updates the UI without requiring page reloads.
-*   **Secure Infrastructure:** FastAPI backend with strict CSP headers, SQL injection protection, XSS sanitization, and automated deployments to AWS EC2 via GitHub Actions.
+*   **Intelligent Retrieval Loop:** Automatically retries document searches up to 3 times with wider parameters (`top_k` and `min_similarity`) if an initial answer has low confidence.
+*   **Deduplicated Vector Ingestion:** Uses SHA-256 content hashing with PostgreSQL `ON CONFLICT DO NOTHING` rules to prevent duplicate chunk insertions in the vector database.
+*   **Resilient API Handling:** Implements exponential backoff retries (1s, 2s, 4s) for Amazon Bedrock Titan v2 calls, with singleton client reuse to avoid connection overhead.
+*   **Data Cleaning & Connection Auto-Detection:** Automatically removes null bytes (`\x00`) from PDF text and detects active local database connections (port 15432 SSH tunnel or 5432 PostgreSQL).
+*   **Retrieval Evaluation Suite:** Includes an 18-query golden-set benchmark measuring retrieval precision and verifying stored vector integrity via fresh Bedrock cosine similarity comparisons.
+*   **Human-in-the-Loop Escalation:** Unanswered queries are sent to human support agents using Amazon SQS queues.
+*   **Cross-User Knowledge Sharing:** Answers verified by human agents are stored back in the vector database as new embeddings, making them available for future user queries.
+*   **Session History:** Tracks chat history in Amazon DynamoDB so users can ask natural follow-up questions.
+*   **Deployment & Security:** FastAPI backend with strict CORS configuration, input sanitization, and automated deployments to AWS EC2 via GitHub Actions.
 
-## 🏗️ Architecture
+## Architecture & Stack
 
-*   **State Machine:** [LangGraph](https://python.langchain.com/docs/langgraph)
-*   **LLM Inference:** [Llama-3.1-8b-instant](https://groq.com/) (via Groq)
-*   **Embeddings:** Amazon Bedrock (`amazon.titan-embed-text-v2:0`)
-*   **Vector Database:** Amazon RDS (PostgreSQL with `pgvector`)
+*   **State Machine:** LangGraph
+*   **LLM Inference:** Llama-3.1-8b-instant (via Groq API)
+*   **Embeddings:** Amazon Bedrock (Titan Text Embeddings v2, 1024 dimensions)
+*   **Vector Database:** Amazon RDS PostgreSQL with pgvector
 *   **Session Memory:** Amazon DynamoDB
-*   **Message Queue:** Amazon SQS (Escalations)
-*   **Archival:** Amazon S3
+*   **Message Queue:** Amazon SQS
+*   **File Storage:** Amazon S3
 *   **Backend:** FastAPI
-*   **Chat Frontend:** React + Vite (`frontend/chat`), hosted on Vercel
-*   **Agent Dashboard:** React + Vite (`frontend/dashboard`), hosted on Vercel — backed by the FastAPI `dashboard` router (password-protected)
+*   **Frontends:** React + Vite (Chat interface & Support Agent Dashboard, hosted on Vercel)
 
-## 📂 Directory Structure
+## Directory Structure
 
 ```text
 rag-system/
 ├── app/
-│   ├── agent/         # LangGraph state machine and node definitions
-│   ├── api/           # FastAPI app, routes (main.py), dashboard router (dashboard.py)
-│   ├── archive/        # S3 archival client
-│   ├── escalation/    # SQS queue producer/consumer logic
-│   ├── ingestion/     # PDF parsing and embedding pipeline
-│   ├── memory/        # DynamoDB session state management
-│   ├── retrieval/     # pgvector queries and semantic similarity
-│   ├── summarizer/    # Query/escalation summarization helpers
-│   └── utils/         # Config loaders and environment helpers
+│   ├── agent/         # LangGraph state machine and node handlers
+│   ├── api/           # FastAPI application and dashboard routers
+│   ├── archive/       # S3 storage integration
+│   ├── escalation/    # SQS queue producer and worker logic
+│   ├── ingestion/     # PDF parsing, text splitting, and embedding logic
+│   ├── memory/        # DynamoDB session persistence
+│   ├── retrieval/     # pgvector query execution and similarity search
+│   ├── summarizer/    # Summarization utilities
+│   └── utils/         # Config loaders, PII masking, and helpers
 ├── frontend/
-│   ├── chat/          # React/Vite end-user chat UI (deployed to Vercel)
-│   └── dashboard/     # React/Vite human-agent dashboard UI (deployed to Vercel)
-├── tests/             # Pytest test suites
-├── .github/workflows/ # ci.yml (tests), cd.yml (deploy backend to AWS EC2)
-└── requirements.txt   # Python dependencies
+│   ├── chat/          # End-user chat interface (React)
+│   └── dashboard/     # Agent dashboard interface (React)
+├── tests/             # Pytest test cases and evaluation scripts
+│   └── RETRIEVAL TESTS/
+│       ├── golden_set.json                # Ground-truth test queries
+│       ├── measure_thresholds.py          # Precision and recall evaluation
+│       ├── verify_embedding_integrity.py  # Stored vector integrity check
+│       ├── diagnose_regression.py         # DB audit and vector dimension verification
+│       ├── run_ingestion.py               # Ingestion runner script
+│       └── truncate_documents.py          # Reset helper script
+├── .github/workflows/ # GitHub Actions CI/CD pipelines
+└── requirements.txt   # Python package dependencies
 ```
 
-## 🛠️ Setup & Installation
+## Retrieval Benchmarking & Verification
+
+To verify database integrity and test retrieval accuracy, run the scripts in `tests/RETRIEVAL TESTS/`:
+
+```bash
+# Verify vector integrity (compares stored vs fresh Bedrock embeddings)
+.venv\Scripts\python.exe "tests/RETRIEVAL TESTS/verify_embedding_integrity.py"
+
+# Run retrieval accuracy benchmark (18 golden-set queries)
+.venv\Scripts\python.exe "tests/RETRIEVAL TESTS/measure_thresholds.py"
+
+# Audit document count and embedding metadata
+.venv\Scripts\python.exe "tests/RETRIEVAL TESTS/diagnose_regression.py"
+```
+
+### Measured Performance
+- **Retrieval Hit Rate:** 17 out of 18 queries (94.4%)
+- **Embedding Match Score:** 1.000000 cosine similarity between stored and fresh vectors
+- **Invalid Vectors:** 0 zero vectors or NaN/Inf values out of 820 stored chunks
+
+## Setup & Installation
 
 ### 1. Prerequisites
-*   Python 3.11+
-*   Node.js (for the `frontend/chat` and `frontend/dashboard` apps)
-*   PostgreSQL with the `pgvector` extension installed
-*   AWS Account (for Bedrock, RDS, DynamoDB, SQS, S3)
-*   Groq API Key
+* Python 3.11+
+* Node.js (for frontend applications)
+* PostgreSQL with pgvector extension enabled
+* AWS Account (Bedrock, RDS, DynamoDB, SQS, S3)
+* Groq API Key
 
-### 2. Environment Variables
-Copy `.env.example` to `.env` and fill in the required credentials:
+### 2. Environment Configuration
+Copy `.env.example` to `.env` and set your credentials:
 ```bash
 cp .env.example .env
 ```
-Ensure you provide your `GROQ_API_KEY`, AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`), `RDS_*` connection details, and `FRONTEND_ORIGINS` (comma-separated list of allowed frontend origins for CORS).
+Ensure `GROQ_API_KEY`, AWS credentials, `RDS_*` connection details, and `FRONTEND_ORIGINS` are configured.
 
-Each frontend also has its own `.env.example` (`frontend/chat/.env.example`, `frontend/dashboard/.env.example`) — copy it to `.env` and set `VITE_API_BASE_URL` to your backend URL.
+Each frontend application also has a local `.env` configuration for `VITE_API_BASE_URL`.
 
-### 3. Install Dependencies
+### 3. Dependencies
 ```bash
 pip install -r requirements.txt
 cd frontend/chat && npm install
@@ -72,31 +101,28 @@ cd ../dashboard && npm install
 ```
 
 ### 4. Database Setup
-The application uses PostgreSQL with `pgvector`. The `pgvector_client.py` will automatically attempt to create the `vector` extension and the necessary `documents` table upon its first connection.
+`pgvector_client.py` initializes the `vector` extension and creates the `documents` table automatically upon connecting.
 
-## 🚀 Running the System
+## Running the Application
 
-### Start the FastAPI Backend
+### Start Backend
 ```bash
 uvicorn app.api.main:app --reload
 ```
-*The API will be available at `http://localhost:8000/`*
+API runs locally at `http://localhost:8000/`.
 
-### Start the Chat Frontend
+### Start Frontends
 ```bash
+# Chat interface
 cd frontend/chat
 npm run dev
-```
 
-### Start the Agent Dashboard
-```bash
+# Agent dashboard
 cd frontend/dashboard
 npm run dev
 ```
-Both dev servers point at `VITE_API_BASE_URL` (default `http://localhost:8000`) from their respective `.env`.
 
-## 🔄 Deployment
+## Deployment Details
 
-*   **Backend:** `.github/workflows/ci.yml` runs `pytest` on every push/PR. On success on `main`, `.github/workflows/cd.yml` SSHs into an AWS EC2 instance, `git pull`s, reinstalls dependencies, and restarts the FastAPI service via `supervisorctl`. Nginx reverse-proxies port 80/443 to uvicorn on port 8000.
-*   **Frontends:** `frontend/chat` and `frontend/dashboard` are each deployed as separate Vercel projects, connected to this GitHub repo — pushing to `main` triggers an automatic Vercel rebuild/redeploy. Set `VITE_API_BASE_URL` in each Vercel project's environment variables to the backend's public HTTPS URL.
-*   **CORS:** the backend's `FRONTEND_ORIGINS` env var must list the exact Vercel URLs (e.g. `https://your-chat.vercel.app,https://your-dashboard.vercel.app`) or the frontends will be blocked by CORS.
+*   **Backend:** Pushing to `main` triggers GitHub Actions. CI runs pytest; CD connects to an AWS EC2 instance over SSH, updates the code, reinstalls requirements, and restarts uvicorn under supervisorctl behind Nginx.
+*   **Frontends:** Both frontends are connected to Vercel and deploy automatically on commits to `main`.
