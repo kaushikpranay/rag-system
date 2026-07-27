@@ -2,6 +2,7 @@ import os
 import logging
 import time
 import hashlib
+import socket
 import psycopg2
 import boto3
 import json
@@ -9,6 +10,23 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from pgvector.psycopg2 import register_vector
 load_dotenv()
+
+TUNNEL_LOCAL_PORT = int(os.getenv("TUNNEL_LOCAL_PORT", "15432"))
+
+def _check_port(port: int) -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            return s.connect_ex(("127.0.0.1", port)) == 0
+    except Exception:
+        return False
+
+if _check_port(TUNNEL_LOCAL_PORT):
+    os.environ["RDS_HOST"] = "127.0.0.1"
+    os.environ["RDS_PORT"] = str(TUNNEL_LOCAL_PORT)
+elif _check_port(5432):
+    os.environ["RDS_HOST"] = "127.0.0.1"
+    os.environ["RDS_PORT"] = "5432"
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +66,7 @@ def init_db():
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_metadata_source ON documents ((metadata->>'source'));")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_metadata_session_id ON documents ((metadata->>'session_id'));")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash_unique ON documents ((metadata->>'content_hash'));")
         cur.close()
         conn.close()
         _db_initialized = True
@@ -64,7 +83,7 @@ def get_connection():
         dbname=RDS_DB, user=RDS_USER,
         password=RDS_PASSWORD
     )
-    
+    conn.autocommit = True
     register_vector(conn)
     return conn
 
@@ -86,11 +105,11 @@ def get_bedrock_embedding(text: str) -> list:
             )
             result = json.loads(response["body"].read())
             return result["embedding"]
-        except ClientError as e:
+        except Exception as e:
             if attempt < max_retries:
                 delay = delays[attempt]
                 logger.warning(
-                    f"[pgvector] Bedrock invoke_model failed with ClientError ({e}). "
+                    f"[pgvector] Bedrock invoke_model failed with {type(e).__name__} ({e}). "
                     f"Retrying in {delay}s (attempt {attempt + 1}/{max_retries})..."
                 )
                 time.sleep(delay)
@@ -102,34 +121,37 @@ def store_chunks(chunks: list):
     conn = get_connection()
     cur = conn.cursor()
     stored = 0
-    for chunk in chunks:
-        clean_text = chunk.page_content.replace('\x00', '').strip()
-        if not clean_text:
-            continue  # skip empty chunks
+    try:
+        for chunk in chunks:
+            clean_text = chunk.page_content.replace('\x00', '').strip()
+            if not clean_text:
+                continue
 
-        content_hash = hashlib.sha256(clean_text.encode("utf-8")).hexdigest()
+            content_hash = hashlib.sha256(clean_text.encode("utf-8")).hexdigest()
+            metadata = dict(chunk.metadata) if chunk.metadata else {}
+            metadata["content_hash"] = content_hash
 
-        cur.execute("SELECT 1 FROM documents WHERE metadata->>'content_hash' = %s LIMIT 1", (content_hash,))
-        if cur.fetchone():
-            logger.warning(f"[pgvector] Duplicate chunk skipped (content_hash={content_hash[:8]}...)")
-            continue
+            try:
+                embedding = get_bedrock_embedding(clean_text)
+            except Exception as e:
+                logger.error(f"[pgvector] Embedding failed, skipping chunk: {e}")
+                continue
 
-        embedding = get_bedrock_embedding(clean_text)
-        if not embedding:
-            logger.warning(f"[pgvector] Empty embedding returned for chunk, skipping insertion: {clean_text[:50]}...")
-            continue
+            if not embedding:
+                logger.warning(f"[pgvector] Empty embedding returned for chunk, skipping insertion: {clean_text[:50]}...")
+                continue
 
-        metadata = dict(chunk.metadata) if chunk.metadata else {}
-        metadata["content_hash"] = content_hash
-
-        cur.execute(
-            "INSERT INTO documents (content, metadata, embedding) VALUES (%s, %s, %s)",
-            (clean_text, json.dumps(metadata), embedding)
-        )
-        stored += 1
-    conn.commit()
-    cur.close()
-    conn.close()
+            cur.execute(
+                """INSERT INTO documents (content, metadata, embedding)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT ((metadata->>'content_hash')) DO NOTHING
+                   RETURNING id""",
+                (clean_text, json.dumps(metadata), embedding)
+            )
+            stored += 1 if cur.fetchone() else 0
+    finally:
+        cur.close()
+        conn.close()
     logger.info(f"[pgvector] {stored} chunks stored")
 
 def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) -> list:

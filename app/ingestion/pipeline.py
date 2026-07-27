@@ -49,4 +49,8 @@ if __name__ == "__main__":
             key = obj['Key']
             if key.endswith('.pdf'):
                 print(f"[Ingestion] Processing: {key}")
-                ingest(key)
+                try:
+                    ingest(key)
+                except Exception as e:
+                    print(f"[Ingestion] FAILED: {key} — {e}")
+                    continue

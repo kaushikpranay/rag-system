@@ -2,11 +2,46 @@ import os
 import sys
 import json
 import logging
+import socket
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from app.retrieval.pgvector_client import retrieve_similar
+# ---------------------------------------------------------------------------
+# SSH Tunnel support: The RDS instance is in a private VPC and not publicly
+# accessible.  When running locally, an SSH tunnel must be open:
+#
+#   ssh -i <key>.pem -N -L 15432:<RDS_HOST>:5432 ec2-user@<EC2_PUBLIC_IP>
+#
+# We detect the tunnel automatically and re-point the connection to localhost.
+# ---------------------------------------------------------------------------
+TUNNEL_LOCAL_PORT = int(os.getenv("TUNNEL_LOCAL_PORT", "15432"))
+
+def _tunnel_is_open(port: int = TUNNEL_LOCAL_PORT) -> bool:
+    """Return True if something is listening on localhost:<port>."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+if _tunnel_is_open():
+    os.environ["RDS_HOST"] = "127.0.0.1"
+    os.environ["RDS_PORT"] = str(TUNNEL_LOCAL_PORT)
+    print(f"[tunnel] Detected SSH tunnel on localhost:{TUNNEL_LOCAL_PORT} — routing DB traffic through it.")
+else:
+    # Check if the RDS host is directly reachable (e.g. running on EC2 in the same VPC)
+    rds_host = os.getenv("RDS_HOST", "localhost")
+    rds_port = int(os.getenv("RDS_PORT", "5432"))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(5)
+        if s.connect_ex((rds_host, rds_port)) != 0:
+            print(
+                f"\n*** ERROR: Cannot reach RDS at {rds_host}:{rds_port} and no SSH tunnel found on localhost:{TUNNEL_LOCAL_PORT}.\n"
+                f"*** Start a tunnel first:\n"
+                f"***   ssh -i <key>.pem -N -L {TUNNEL_LOCAL_PORT}:{rds_host}:5432 ec2-user@<EC2_PUBLIC_IP>\n"
+            )
+            sys.exit(1)
+
+from app.retrieval.pgvector_client import retrieve_similar  # noqa: E402 — must import AFTER env override
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
