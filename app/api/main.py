@@ -86,6 +86,7 @@ class QueryResponse(BaseModel):
     answer: str
     confidence: str
     escalated: bool
+    truncated: bool = False
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
@@ -119,7 +120,8 @@ def resolve_query(request: Request, body: QueryRequest):
             query=body.query,
             answer=result["answer"],
             confidence=result["confidence"],
-            escalated=result["escalate"]
+            escalated=result["escalate"],
+            truncated=result.get("truncated", False)
         )
     except Exception as e:
         logger.error(f"Query resolution failed: {e}")

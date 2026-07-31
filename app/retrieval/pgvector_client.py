@@ -4,6 +4,7 @@ import time
 import hashlib
 import socket
 import json
+import difflib
 import boto3
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
@@ -280,7 +281,7 @@ def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) ->
     if not embedding:
         return []
     embedding_str = "[" + ",".join(map(str, embedding)) + "]"
-    fetch_k = min(top_k * 4, 30)
+    fetch_k = min(top_k * 6, 50)
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -304,6 +305,24 @@ def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) ->
             cur.close()
     finally:
         conn.close()
+
+    kept_candidates = []
+    dropped_count = 0
+    for cand in candidates:
+        is_duplicate = False
+        for kept in kept_candidates:
+            if difflib.SequenceMatcher(None, cand["content"], kept["content"]).ratio() > 0.95:
+                is_duplicate = True
+                break
+        if is_duplicate:
+            dropped_count += 1
+        else:
+            kept_candidates.append(cand)
+
+    if dropped_count > 0:
+        logger.info(f"[pgvector] Deduplication dropped {dropped_count} near-duplicate candidate(s) (>95% text similarity).")
+
+    candidates = kept_candidates
 
     reranked = rerank_chunks(query, candidates, top_n=top_k)
     top_score = reranked[0]["rerank_score"] if reranked else 0.0

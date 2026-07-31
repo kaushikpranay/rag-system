@@ -1,5 +1,6 @@
 import os
 import uuid
+import time
 import logging
 from groq import Groq
 from dotenv import load_dotenv
@@ -29,6 +30,7 @@ class AgentState(TypedDict):
     escalate: bool
     retry_count: int
     error: Optional[str]
+    truncated: bool
 
 #------Node 1: Input ----------------------------
 
@@ -84,21 +86,43 @@ def retrieval_node(state: AgentState) -> AgentState:
 
 #------Node 4: Context -----------------
 def context_node(state: AgentState) -> AgentState:
+    chunks = list(state.get("retrieved_chunks", []))
     # Check if context was already set by the human-verified retrieval path
-    # (not just the empty string from initialization)
     if state.get("context") and state["context"].strip():
         logger.info(f"[context_node] Using pre-set human-verified context")
-        return state
-    chunks = state["retrieved_chunks"]
-    if not chunks:
+        context = state["context"]
+    elif not chunks:
         context = "No relevant context found"
     else:
         context = "\n\n".join([
-            f"[Chunk {i+1} | Similarity: {c['similarity']:.2f}]\n{c['content']}"
+            f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
             for i, c in enumerate(chunks)
         ])
-    logger.info(f"[context_node] Context built - {len(chunks)} chunks")
-    return {**state, "context": context}
+
+    est_tokens = len(context) // 4
+    if est_tokens > 6000 and chunks:
+        sorted_chunks = sorted(chunks, key=lambda c: c.get("similarity", 0.0), reverse=True)
+        dropped_count = 0
+        while len(context) // 4 > 6000 and sorted_chunks:
+            sorted_chunks.pop()  # Drop lowest-similarity chunk
+            dropped_count += 1
+            if not sorted_chunks:
+                context = "No relevant context found"
+            else:
+                context = "\n\n".join([
+                    f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
+                    for i, c in enumerate(sorted_chunks)
+                ])
+
+        chunks = sorted_chunks
+        final_est_tokens = len(context) // 4
+        logger.info(
+            f"[context_node] Exceeded token budget (6000). Dropped {dropped_count} lowest-similarity chunk(s). Final estimated tokens: {final_est_tokens}"
+        )
+    else:
+        logger.info(f"[context_node] Context built - {len(chunks)} chunks (Est. tokens: {est_tokens})")
+
+    return {**state, "context": context, "retrieved_chunks": chunks}
 
 
 #------Node 5: LLM -------------------
@@ -141,21 +165,40 @@ User Question: {query}
 
 Answer:"""
 
-    try:
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    delays = [1, 2]
+    max_retries = len(delays)
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=512
-        )
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=512
+            )
 
-        answer = response.choices[0].message.content.strip()
-        logger.info(f"[llm_node] Answer generated ({len(answer)} chars)")
-        return {**state, "answer": answer}
-    except Exception as e:
-        logger.error(f"[llm_node] LLM call failed: {e}")
-        return {**state, "answer": "I'm sorry, I'm experiencing technical difficulties. Please try again shortly."}
+            answer = response.choices[0].message.content.strip()
+            finish_reason = response.choices[0].finish_reason
+            truncated = (finish_reason == "length")
+            if truncated:
+                logger.warning("[llm_node] Response was truncated due to length limit (finish_reason='length')")
+            logger.info(f"[llm_node] Answer generated ({len(answer)} chars)")
+            return {**state, "answer": answer, "truncated": truncated}
+        except Exception as e:
+            exc_type = type(e).__name__
+            if attempt < max_retries:
+                delay = delays[attempt]
+                logger.warning(
+                    f"[llm_node] Call failed ({exc_type}: {e}). Retrying in {delay}s (attempt {attempt + 1}/{max_retries})..."
+                )
+                time.sleep(delay)
+            else:
+                logger.error(f"[llm_node] LLM call failed after {max_retries} retries ({exc_type}: {e})")
+                return {
+                    **state,
+                    "answer": "I'm sorry, I'm experiencing technical difficulties. Please try again shortly.",
+                    "truncated": False
+                }
 #-------Node 6: Evaluation --------------------
 
 def evaluation_node(state: AgentState)->AgentState:
@@ -292,14 +335,16 @@ def run_agent(query: str, session_id: str = "test-session") -> dict:
         confidence="",
         escalate=False,
         retry_count=0,
-        error=None
+        error=None,
+        truncated=False
     )
     result = agent.invoke(initial_state)
     return {
         "answer": result["answer"],
         "confidence": result["confidence"],
         "escalate": result["escalate"],
-        "session_id": result["session_id"]
+        "session_id": result["session_id"],
+        "truncated": result.get("truncated", False)
     }
 
 if __name__ == "__main__":
@@ -308,3 +353,4 @@ if __name__ == "__main__":
     print(f"Answer: {response['answer']}")
     print(f"Confidence: {response['confidence']}")
     print(f"Escalate: {response['escalate']}")
+    print(f"Truncated: {response['truncated']}")

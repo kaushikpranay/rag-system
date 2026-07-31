@@ -5,7 +5,7 @@
     "miss_count": 0,
     "avg_correct_similarity": 0.515614504218131,
     "min_correct_similarity": 0.3305729031562805,
-    "avg_top_wrong_similarity": 0.4740474108812498
+    "avg_top_wrong_similarity": 0.4544554477373798
   },
   "details": [
     {
@@ -46,7 +46,7 @@
       "status": "HIT",
       "correct_rank": 1,
       "correct_similarity": 0.34452447295188904,
-      "top_wrong_similarity": 0.6081727743148804
+      "top_wrong_similarity": 0.2555174377252203
     },
     {
       "query": "What temperature setting is used to make the model responses precise and deterministic?",
@@ -148,7 +148,7 @@
       "query": "How do you calculate and print the response time for a vector database query in seconds?",
       "expected_chunk_substring": "time() - start_time\nprint(f\"Querying response time: {response_time:.2f} seconds\")  \nThe output contai",
       "status": "HIT",
-      "correct_rank": 13,
+      "correct_rank": 14,
       "correct_similarity": 0.3305729031562805,
       "top_wrong_similarity": 0.571275021357834
     }
