@@ -81,7 +81,7 @@ To verify database integrity, test retrieval accuracy, and run vector database b
 
 ### Measured Performance
 - **Retrieval Hit Rate:** **18 out of 18 queries (100.0%)** on golden-set benchmark.
-- **Top Rank Correct Chunk Accuracy:** Average correct-chunk similarity (0.5156) > average top wrong-chunk similarity (0.4740).
+- **Top Rank Correct Chunk Accuracy:** Average correct-chunk similarity (0.5156) > average top wrong-chunk similarity (0.4740)..
 - **ANN Recall@1:** **86.67%** (SLA Target: &ge; 70.0%)
 - **HNSW Index Scan:** Active and verified via PostgreSQL query plan analysis.
 - **Latency Distribution:** P50 Latency = **6.97 ms**, P90 Latency = **11.39 ms**, Average Latency = **6.78 ms**.
