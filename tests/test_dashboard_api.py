@@ -6,15 +6,15 @@ import time so this runs in CI without real AWS credentials.
 import os
 import boto3
 
-os.environ.setdefault("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/000000000000/fake")
-os.environ.setdefault("S3_BUCKET_NAME", "fake-bucket")
-os.environ.setdefault("DYNAMODB_TABLE", "fake-table")
+os.environ.setdefault("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/961546607247/rag-escalation-queue")
+os.environ.setdefault("S3_BUCKET_NAME", "rag-system-kaushik-pranay")
+os.environ.setdefault("DYNAMODB_TABLE", "rag-session-memory")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 
-FAKE_PASSWORD_HASH = "fake-/rag-system/DASHBOARD_PASSWORD_HASH"
-os.environ["DASHBOARD_PASSWORD_HASH"] = FAKE_PASSWORD_HASH
+REAL_PASSWORD_HASH = "c35aa6069fd4489ca784a6f2e82c9099287f9abe22f17e5a194940c43e983633"
+os.environ["DASHBOARD_PASSWORD_HASH"] = REAL_PASSWORD_HASH
 _real_client = boto3.client
 
 
@@ -22,7 +22,7 @@ def _fake_client(service, *args, **kwargs):
     if service == "ssm":
         class FakeSSM:
             def get_parameter(self, Name, WithDecryption=True):
-                return {"Parameter": {"Value": f"fake-{Name}"}}
+                return {"Parameter": {"Value": REAL_PASSWORD_HASH}}
         return FakeSSM()
     return _real_client(service, *args, **kwargs)
 
@@ -34,11 +34,11 @@ from app.api.main import app
 from app.utils import config
 from app.api import dashboard as dashboard_module
 
-config.DASHBOARD_PASSWORD_HASH = FAKE_PASSWORD_HASH
-dashboard_module.DASHBOARD_PASSWORD_HASH = FAKE_PASSWORD_HASH
+config.DASHBOARD_PASSWORD_HASH = REAL_PASSWORD_HASH
+dashboard_module.DASHBOARD_PASSWORD_HASH = REAL_PASSWORD_HASH
 
 client = TestClient(app)
-AUTH_HEADER = {"Authorization": f"Bearer {FAKE_PASSWORD_HASH}"}
+AUTH_HEADER = {"Authorization": f"Bearer {REAL_PASSWORD_HASH}"}
 VALID_SESSION_ID = "11111111-1111-1111-1111-111111111111"
 
 
@@ -48,7 +48,7 @@ def test_login_rejects_wrong_password():
 
 
 def test_login_accepts_correct_password():
-    r = client.post("/dashboard/login", json={"password_hash": FAKE_PASSWORD_HASH})
+    r = client.post("/dashboard/login", json={"password_hash": REAL_PASSWORD_HASH})
     assert r.status_code == 200
     assert r.json() == {"ok": True}
 
