@@ -257,11 +257,12 @@ def evaluation_node(state: AgentState)->AgentState:
             logger.info(f"[evaluation_node] Confidence: high | Attempt: {retry_count + 1}")
             return {**state, "confidence": "high", "escalate": False}
 
-    # LLM couldn't answer — decide: retry or escalate
+    # LLM couldn't answer or groundedness failed — decide: retry or escalate
     if retry_count < 2:
         # Retry with wider search params (max 3 attempts: 0, 1, 2)
         new_retry = retry_count + 1
-        logger.info(f"[evaluation_node] LLM refused — retrying ({new_retry}/3) with wider search")
+        reason = "LLM refused" if llm_refused else "Groundedness check failed"
+        logger.info(f"[evaluation_node] {reason} — retrying ({new_retry}/3) with wider search")
         return {
             **state,
             "confidence": "retry",
