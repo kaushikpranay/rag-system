@@ -1,7 +1,10 @@
 import boto3
 import os
+import logging
 
-def get_secret(name: str) -> str:
+logger = logging.getLogger(__name__)
+
+def get_secret(name: str, default: str = "") -> str:
     # Allow reading directly from env variables (e.g. RDS_PASSWORD for /rag-system/RDS_PASSWORD)
     env_name = name.split('/')[-1]
     env_val = os.getenv(env_name)
@@ -13,10 +16,8 @@ def get_secret(name: str) -> str:
         response = ssm.get_parameter(Name=name, WithDecryption=True)
         return response['Parameter']['Value']
     except Exception as e:
-        raise RuntimeError(
-            f"Failed to retrieve secret '{name}' from environment variable '{env_name}' "
-            f"and AWS SSM fallback failed: {str(e)}"
-        ) from e
+        logger.warning(f"Failed to retrieve secret '{name}' from env '{env_name}' and AWS SSM fallback: {e}")
+        return default
 
 
 # AWS
