@@ -3,7 +3,7 @@ import sys
 import time
 import json
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Ensure test dir and project root are in sys.path
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +23,7 @@ def run_benchmarks_and_generate_report():
     output_dir = os.path.dirname(os.path.abspath(__file__))
     report_path = os.path.join(output_dir, "benchmark.md")
     
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     
     if not is_db_available():
         print("[benchmark_reporter] Database is unavailable. Generating skipped benchmark report.")
@@ -104,12 +104,16 @@ def run_benchmarks_and_generate_report():
     cur.close()
     conn.close()
 
+    target_host = os.getenv("RDS_HOST", "127.0.0.1")
+    target_port = os.getenv("RDS_PORT", "5432")
+
     # Markdown Report Generation
     report_content = f"""# Vector Database & pgvector Benchmark Report
 
 **Generated:** {timestamp}  
+**Target Endpoint:** `{target_host}:{target_port}`  
 **Database System:** PostgreSQL (pgvector v{pgv_version})  
-**Dataset Size:** {total_vectors:,} vectors ({table_size})  
+**Dataset Size:** {total_vectors:,} active vectors ({table_size})  
 **Connection Status:** Active (Pool Health: {pool_health})
 
 ---
@@ -118,15 +122,18 @@ def run_benchmarks_and_generate_report():
 
 | Metric Category | Metric | Measured Value | SLA Target | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **ANN Accuracy** | Recall@1 | **{recall_metrics['recall@1'] * 100:.2f}%** | &ge; 70.0% | {"PASSED" if recall_metrics['recall@1'] >= 0.70 else "WARNING"} |
-| **ANN Accuracy** | Recall@3 | **{recall_metrics['recall@3'] * 100:.2f}%** | &ge; 75.0% | PASSED |
-| **ANN Accuracy** | Recall@5 | **{recall_metrics['recall@5'] * 100:.2f}%** | &ge; 80.0% | PASSED |
-| **Ranking Quality** | MRR | **{recall_metrics['mrr']:.4f}** | &ge; 0.70 | PASSED |
-| **Ranking Quality** | NDCG@5 | **{recall_metrics['ndcg']:.4f}** | &ge; 0.75 | PASSED |
-| **Latency** | Average Latency | **{latency_metrics['avg']:.2f} ms** | &lt; 50 ms | PASSED |
-| **Latency** | P50 Latency | **{latency_metrics['p50']:.2f} ms** | &lt; 30 ms | PASSED |
-| **Latency** | P95 Latency | **{latency_metrics['p95']:.2f} ms** | &lt; 250 ms | PASSED |
-| **Latency** | P99 Latency | **{latency_metrics['p99']:.2f} ms** | &lt; 500 ms | PASSED |
+| **ANN Accuracy** | Recall@1 | **{recall_metrics['recall@1'] * 100:.2f}%** | &ge; 70.0% | {"PASSED" if recall_metrics['recall@1'] >= 0.70 else "FAILED"} |
+| **ANN Accuracy** | Recall@3 | **{recall_metrics['recall@3'] * 100:.2f}%** | &ge; 75.0% | {"PASSED" if recall_metrics['recall@3'] >= 0.75 else "FAILED"} |
+| **ANN Accuracy** | Recall@5 | **{recall_metrics['recall@5'] * 100:.2f}%** | &ge; 80.0% | {"PASSED" if recall_metrics['recall@5'] >= 0.80 else "FAILED"} |
+| **Ranking Quality** | MRR | **{recall_metrics['mrr']:.4f}** | &ge; 0.70 | {"PASSED" if recall_metrics['mrr'] >= 0.70 else "FAILED"} |
+| **Ranking Quality** | NDCG@5 | **{recall_metrics['ndcg']:.4f}** | &ge; 0.75 | {"PASSED" if recall_metrics['ndcg'] >= 0.75 else "FAILED"} |
+| **Latency Distribution** | Min Latency | **{latency_metrics['min']:.2f} ms** | N/A | INFORMATIONAL |
+| **Latency Distribution** | P50 Latency | **{latency_metrics['p50']:.2f} ms** | &lt; 30 ms | {"PASSED" if latency_metrics['p50'] < 30.0 else "WARNING"} |
+| **Latency Distribution** | P90 Latency | **{latency_metrics['p90']:.2f} ms** | &lt; 150 ms | {"PASSED" if latency_metrics['p90'] < 150.0 else "WARNING"} |
+| **Latency Distribution** | P95 Latency | **{latency_metrics['p95']:.2f} ms** | &lt; 250 ms | {"PASSED" if latency_metrics['p95'] < 250.0 else "WARNING"} |
+| **Latency Distribution** | P99 Latency | **{latency_metrics['p99']:.2f} ms** | &lt; 500 ms | {"PASSED" if latency_metrics['p99'] < 500.0 else "WARNING"} |
+| **Latency Distribution** | Max Latency | **{latency_metrics['max']:.2f} ms** | N/A | INFORMATIONAL |
+| **Latency Distribution** | Average Latency | **{latency_metrics['avg']:.2f} ms** | &lt; 50 ms | {"PASSED" if latency_metrics['avg'] < 50.0 else "WARNING"} |
 | **Index Status** | HNSW Index Usage | **{hnsw_status}** | HNSW Index Scan | PASSED |
 | **Infra Health** | Active Connections | **{active_conns}** | &le; 20 | PASSED |
 | **Infra Health** | Pool Status | **{pool_health}** | HEALTHY | PASSED |

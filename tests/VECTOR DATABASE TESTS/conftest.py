@@ -19,17 +19,23 @@ if PROJECT_ROOT not in sys.path:
 # Tunnel auto-detection for local dev
 TUNNEL_LOCAL_PORT = int(os.getenv("TUNNEL_LOCAL_PORT", "15432"))
 
-def _check_port(port: int) -> bool:
+def _check_port(port: int, host: str = "127.0.0.1") -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(1)
-            return s.connect_ex(("127.0.0.1", port)) == 0
+            return s.connect_ex((host, port)) == 0
     except Exception:
         return False
+
+env_host = os.getenv("RDS_HOST", "").strip()
+env_port = int(os.getenv("RDS_PORT", "5432"))
 
 if _check_port(TUNNEL_LOCAL_PORT):
     os.environ["RDS_HOST"] = "127.0.0.1"
     os.environ["RDS_PORT"] = str(TUNNEL_LOCAL_PORT)
+elif env_host and env_host not in ("localhost", "127.0.0.1") and _check_port(env_port, env_host):
+    os.environ["RDS_HOST"] = env_host
+    os.environ["RDS_PORT"] = str(env_port)
 elif _check_port(5432):
     os.environ["RDS_HOST"] = "127.0.0.1"
     os.environ["RDS_PORT"] = "5432"

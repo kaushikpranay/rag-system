@@ -46,10 +46,18 @@ def compute_ann_recall_metrics(conn, num_test_queries=10, k_max=5):
     recalls_1, recalls_3, recalls_5 = [], [], []
     mrrs, ndcgs = [], []
     
-    from conftest import vec_to_str
+    from conftest import vec_to_array, vec_to_str
 
     for doc_id, vec in sample_rows:
-        vec_str = vec_to_str(vec)
+        arr = vec_to_array(vec)
+        # Apply slight vector perturbation so query is realistic near-neighbor, not bitwise identical self-match
+        np.random.seed(doc_id % 10000)
+        noise = np.random.randn(len(arr)).astype(np.float32) * 0.15
+        q_vec = arr + noise
+        norm = np.linalg.norm(q_vec)
+        if norm > 0:
+            q_vec = q_vec / norm
+        vec_str = vec_to_str(q_vec)
         
         # 1. Ground truth (Brute-Force exact scan)
         cur.execute("SET enable_indexscan = off;")

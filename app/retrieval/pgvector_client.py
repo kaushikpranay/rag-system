@@ -15,17 +15,23 @@ load_dotenv()
 
 TUNNEL_LOCAL_PORT = int(os.getenv("TUNNEL_LOCAL_PORT", "15432"))
 
-def _check_port(port: int) -> bool:
+def _check_port(port: int, host: str = "127.0.0.1") -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(1)
-            return s.connect_ex(("127.0.0.1", port)) == 0
+            return s.connect_ex((host, port)) == 0
     except Exception:
         return False
+
+env_host = os.getenv("RDS_HOST", "").strip()
+env_port = int(os.getenv("RDS_PORT", "5432"))
 
 if _check_port(TUNNEL_LOCAL_PORT):
     os.environ["RDS_HOST"] = "127.0.0.1"
     os.environ["RDS_PORT"] = str(TUNNEL_LOCAL_PORT)
+elif env_host and env_host not in ("localhost", "127.0.0.1") and _check_port(env_port, env_host):
+    os.environ["RDS_HOST"] = env_host
+    os.environ["RDS_PORT"] = str(env_port)
 elif _check_port(5432):
     os.environ["RDS_HOST"] = "127.0.0.1"
     os.environ["RDS_PORT"] = "5432"
@@ -39,9 +45,23 @@ DB_POOL_MAX_CONN = int(os.getenv("DB_POOL_MAX_CONN", "20"))
 
 _pool = None
 _db_initialized = False
+_reranker_model = None
 
 # Reuse a single Bedrock client instead of creating one per-call
 _bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+
+
+def _get_reranker():
+    global _reranker_model
+    if _reranker_model is None:
+        try:
+            from sentence_transformers import CrossEncoder
+            logger.info("[pgvector] Loading CrossEncoder model cross-encoder/ms-marco-MiniLM-L-6-v2...")
+            _reranker_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        except Exception as e:
+            logger.warning(f"[pgvector] Failed to load CrossEncoder model ({e}). Reranking will fall back to raw vector similarity.")
+            return None
+    return _reranker_model
 
 
 def _get_pool():
@@ -129,7 +149,7 @@ def init_db():
                 cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash ON documents ((metadata->>'content_hash'));")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_source ON documents ((metadata->>'source'));")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_session_id ON documents ((metadata->>'session_id'));")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_embedding_hnsw ON documents USING hnsw (embedding vector_cosine_ops);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_embedding_hnsw ON documents USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 128);")
             finally:
                 cur.close()
         finally:
@@ -239,11 +259,28 @@ def store_chunks(chunks: list) -> int:
     return stored
 
 
+def rerank_chunks(query: str, chunks: list, top_n: int) -> list:
+    if not chunks:
+        return []
+    reranker = _get_reranker()
+    if reranker is None:
+        for chunk in chunks:
+            chunk.setdefault("rerank_score", float(chunk.get("similarity", 0.0)))
+        return chunks[:top_n]
+    pairs = [(query, chunk["content"]) for chunk in chunks]
+    scores = reranker.predict(pairs)
+    for chunk, score in zip(chunks, scores):
+        chunk["rerank_score"] = float(score)
+    sorted_chunks = sorted(chunks, key=lambda c: c["rerank_score"], reverse=True)
+    return sorted_chunks[:top_n]
+
+
 def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) -> list:
     embedding = get_bedrock_embedding(query)
     if not embedding:
         return []
     embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+    fetch_k = min(top_k * 4, 30)
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -254,19 +291,25 @@ def retrieve_similar(query: str, top_k: int = 5, min_similarity: float = 0.3) ->
                 FROM (
                     SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
                     FROM documents
-                    ORDER BY embedding <=> %s::vector
+                    ORDER BY embedding <=> %s::vector, id ASC
                     LIMIT %s
                 ) sub
                 WHERE similarity >= %s
                 """,
-                (embedding_str, embedding_str, top_k, min_similarity)
+                (embedding_str, embedding_str, fetch_k, min_similarity)
             )
             results = cur.fetchall()
-            return [{"content": r[0], "metadata": r[1], "similarity": r[2]} for r in results]
+            candidates = [{"content": r[0], "metadata": r[1], "similarity": r[2]} for r in results]
         finally:
             cur.close()
     finally:
         conn.close()
+
+    reranked = rerank_chunks(query, candidates, top_n=top_k)
+    top_score = reranked[0]["rerank_score"] if reranked else 0.0
+    top_cos = reranked[0]["similarity"] if reranked else 0.0
+    print(f"[RERANKER LOG] Query: '{query[:40]}...' | top_k={top_k} | fetch_k={fetch_k} | candidates={len(candidates)} | top_rerank_score={top_score:.4f} | top_cos_sim={top_cos:.4f}")
+    return reranked
 
 
 def store_verified_answer(query: str, answer: str, session_id: str = "") -> bool:
@@ -318,7 +361,7 @@ def search_human_verified(query: str, top_k: int = 3):
                 SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
                 FROM documents
                 WHERE metadata->>'source' = 'human_verified'
-                ORDER BY embedding <=> %s::vector
+                ORDER BY embedding <=> %s::vector, id ASC
                 LIMIT %s
             """, (embedding_str, embedding_str, top_k))
             rows = cur.fetchall()

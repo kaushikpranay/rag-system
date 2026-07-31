@@ -23,6 +23,9 @@ def test_hnsw_index_existence_and_integrity(db_conn):
     idx = cur.fetchone()
     assert idx is not None, "HNSW index 'idx_documents_embedding_hnsw' does not exist on documents table"
     assert "using hnsw" in idx[1].lower(), f"Index definition does not use HNSW: {idx[1]}"
+    assert "m=" in idx[1].lower() and "16" in idx[1], f"Index definition missing tuned parameter m=16: {idx[1]}"
+    assert "ef_construction=" in idx[1].lower() and "128" in idx[1], f"Index definition missing tuned parameter ef_construction=128: {idx[1]}"
+
     
     # 3. Verify index status is valid (not indisvalid = false)
     cur.execute("""

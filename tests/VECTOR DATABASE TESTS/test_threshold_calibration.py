@@ -28,23 +28,32 @@ def calibrate_similarity_thresholds(conn):
 
     cur = conn.cursor()
     
-    from conftest import vec_to_str
+    from conftest import vec_to_array, vec_to_str
 
     for th in thresholds:
         tp, fp, fn, tn = 0, 0, 0, 0
-        for doc_id, vec in rows[:10]:
-            vec_str = vec_to_str(vec)
+        for doc_id, vec in rows[:25]:
+            arr = vec_to_array(vec)
+            np.random.seed(doc_id % 10000)
+            variance = 0.04 + (doc_id % 5) * 0.02
+            noise = np.random.randn(len(arr)).astype(np.float32) * variance
+            q_vec = arr + noise
+            norm = np.linalg.norm(q_vec)
+            if norm > 0:
+                q_vec = q_vec / norm
+            vec_str = vec_to_str(q_vec)
+
             cur.execute("""
-                SELECT 1 - (embedding <=> %s::vector) AS sim 
+                SELECT id, 1 - (embedding <=> %s::vector) AS sim 
                 FROM documents 
                 WHERE embedding IS NOT NULL 
                 ORDER BY embedding <=> %s::vector 
                 LIMIT 10;
             """, (vec_str, vec_str))
-            sims = [r[0] for r in cur.fetchall()]
+            sims = cur.fetchall()
             
-            for rank, s in enumerate(sims):
-                is_relevant = (rank <= 3) # Top 3 docs considered relevant
+            for rank, (r_id, s) in enumerate(sims):
+                is_relevant = (r_id == doc_id) # True matching target document chunk
                 is_retrieved = (s >= th)
                 
                 if is_relevant and is_retrieved:

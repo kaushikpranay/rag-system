@@ -1,11 +1,11 @@
 {
   "summary": {
     "total_queries": 18,
-    "hit_count": 17,
-    "miss_count": 1,
-    "avg_correct_similarity": 0.5264993042805928,
-    "min_correct_similarity": 0.34452447295188904,
-    "avg_top_wrong_similarity": 0.5388965748941967
+    "hit_count": 18,
+    "miss_count": 0,
+    "avg_correct_similarity": 0.515614504218131,
+    "min_correct_similarity": 0.3305729031562805,
+    "avg_top_wrong_similarity": 0.4740474108812498
   },
   "details": [
     {
@@ -14,15 +14,15 @@
       "status": "HIT",
       "correct_rank": 1,
       "correct_similarity": 0.6720133423805237,
-      "top_wrong_similarity": 0.4437040090560913
+      "top_wrong_similarity": 0.43327510356903076
     },
     {
       "query": "What triggers the data retrieval process in a RAG system?",
       "expected_chunk_substring": "retrieval process is triggered by the user input or automated\ninput (G1).",
       "status": "HIT",
-      "correct_rank": 4,
+      "correct_rank": 1,
       "correct_similarity": 0.6085181702949798,
-      "top_wrong_similarity": 0.6449856373676289
+      "top_wrong_similarity": 0.5534025963064914
     },
     {
       "query": "How does the LangChain framework streamline generative AI model integration?",
@@ -30,21 +30,21 @@
       "status": "HIT",
       "correct_rank": 1,
       "correct_similarity": 0.8035728218300847,
-      "top_wrong_similarity": 0.43065479811103424
+      "top_wrong_similarity": 0.3546551465988159
     },
     {
       "query": "Where can I find the notebook to get started with basic RAG foundations and evaluation?",
       "expected_chunk_substring": "open RAG_Overview.ipynb in the GitHub repository.",
       "status": "HIT",
-      "correct_rank": 10,
+      "correct_rank": 1,
       "correct_similarity": 0.42426257874146645,
-      "top_wrong_similarity": 0.48689821362495767
+      "top_wrong_similarity": 0.3932089443927381
     },
     {
       "query": "How do you measure request time when calling the OpenAI API client in Python?",
       "expected_chunk_substring": ")\ngptmodel=\"gpt-4o\"\nstart_time = time.time()  # Start timing before the request\nWe now create a fun",
       "status": "HIT",
-      "correct_rank": 7,
+      "correct_rank": 1,
       "correct_similarity": 0.34452447295188904,
       "top_wrong_similarity": 0.6081727743148804
     },
@@ -54,23 +54,23 @@
       "status": "HIT",
       "correct_rank": 1,
       "correct_similarity": 0.3493653715413365,
-      "top_wrong_similarity": 0.29124137267573214
+      "top_wrong_similarity": 0.23923553654723917
     },
     {
       "query": "What prompt query is used to test GPT-4o's baseline knowledge of a RAG store?",
       "expected_chunk_substring": "query = \"define a rag store\"",
       "status": "HIT",
-      "correct_rank": 11,
+      "correct_rank": 1,
       "correct_similarity": 0.3991368533209737,
-      "top_wrong_similarity": 0.5463969707489053
+      "top_wrong_similarity": 0.3539324191848988
     },
     {
       "query": "How does TfidfVectorizer quantify word relevance across a text corpus?",
       "expected_chunk_substring": "t cosine_similarity\nTfidfVectorizer imports the class that converts text documents into a\nmatrix of TF-IDF features. Term Frequency-Inve",
       "status": "HIT",
-      "correct_rank": 3,
+      "correct_rank": 1,
       "correct_similarity": 0.35693398118019104,
-      "top_wrong_similarity": 0.3736049346210044
+      "top_wrong_similarity": 0.2958112955093384
     },
     {
       "query": "What function calculates enhanced cosine similarity using semantic content and expanded word sets?",
@@ -84,25 +84,25 @@
       "query": "How does the keyword search function calculate common keywords between a query and database records?",
       "expected_chunk_substring": "common_keywords = query_keywords.intersection(record",
       "status": "HIT",
-      "correct_rank": 2,
+      "correct_rank": 1,
       "correct_similarity": 0.5363192558288574,
-      "top_wrong_similarity": 0.5575793649208934
+      "top_wrong_similarity": 0.39256847545096496
     },
     {
       "query": "Why is vector index-based search faster than searching hundreds of sentences with raw keywords?",
       "expected_chunk_substring": "Using an index will reduce the\ncomputational load to just a fraction of the total data.",
       "status": "HIT",
-      "correct_rank": 8,
+      "correct_rank": 7,
       "correct_similarity": 0.43492779523564684,
-      "top_wrong_similarity": 0.6689252057991887
+      "top_wrong_similarity": 0.5597605371617961
     },
     {
       "query": "How is an augmented input string constructed by combining a query with a retrieved record?",
       "expected_chunk_substring": "nd print the result\naugmented_input=query+\": \"+best_matching_record\nprint_formatted_res",
       "status": "HIT",
-      "correct_rank": 2,
+      "correct_rank": 1,
       "correct_similarity": 0.4616218873938531,
-      "top_wrong_similarity": 0.5245712682860343
+      "top_wrong_similarity": 0.4141404977953145
     },
     {
       "query": "What embedding model is used to convert cleaned raw text into vectors before storing in Deep Lake?",
@@ -110,15 +110,15 @@
       "status": "HIT",
       "correct_rank": 1,
       "correct_similarity": 0.6563344597816467,
-      "top_wrong_similarity": 0.6114546656608582
+      "top_wrong_similarity": 0.5489767789840698
     },
     {
       "query": "What are the main differences between vector-based similarity search and index-based retrieval?",
       "expected_chunk_substring": "reorganized using retrieval indexing types. Table",
       "status": "HIT",
-      "correct_rank": 5,
+      "correct_rank": 4,
       "correct_similarity": 0.6203081607818604,
-      "top_wrong_similarity": 0.6879544258117676
+      "top_wrong_similarity": 0.6716020703315735
     },
     {
       "query": "How does LlamaIndex trace a textual query response back to source images in multimodal datasets?",
@@ -140,16 +140,16 @@
       "query": "What notebook file is used to implement knowledge graphs with Deep Lake and LlamaIndex?",
       "expected_chunk_substring": "Knowledge_Graph_Deep_Lake_LlamaIndex_OpenAI_RAG.ipynb, in which\nwe will implement all three pipelines.",
       "status": "HIT",
-      "correct_rank": 6,
+      "correct_rank": 2,
       "correct_similarity": 0.4683290123939514,
-      "top_wrong_similarity": 0.5562557313594668
+      "top_wrong_similarity": 0.44637224397824826
     },
     {
       "query": "How do you calculate and print the response time for a vector database query in seconds?",
       "expected_chunk_substring": "time() - start_time\nprint(f\"Querying response time: {response_time:.2f} seconds\")  \nThe output contai",
-      "status": "MISS",
-      "correct_rank": null,
-      "correct_similarity": null,
+      "status": "HIT",
+      "correct_rank": 13,
+      "correct_similarity": 0.3305729031562805,
       "top_wrong_similarity": 0.571275021357834
     }
   ]

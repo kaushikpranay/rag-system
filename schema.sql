@@ -22,5 +22,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash ON documents ((meta
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents ((metadata->>'source'));
 CREATE INDEX IF NOT EXISTS idx_documents_session_id ON documents ((metadata->>'session_id'));
 
--- HNSW index for fast vector similarity search
-CREATE INDEX IF NOT EXISTS idx_documents_embedding_hnsw ON documents USING hnsw (embedding vector_cosine_ops);
+-- HNSW index for fast vector similarity search with explicit tuning parameters
+CREATE INDEX IF NOT EXISTS idx_documents_embedding_hnsw ON documents USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 128);

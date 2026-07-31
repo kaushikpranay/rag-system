@@ -80,28 +80,35 @@ def measure_thresholds():
         correct_sim = None
         top_wrong_sim = None
 
+        correct_rerank_score = None
+        top_wrong_rerank_score = None
+
         for rank, res in enumerate(results, 1):
             content = res.get("content", "")
             sim = float(res.get("similarity", 0.0))
+            r_score = float(res.get("rerank_score", 0.0))
 
             if expected_substring in content:
                 if correct_chunk is None:
                     correct_chunk = res
                     correct_rank = rank
                     correct_sim = sim
+                    correct_rerank_score = r_score
             else:
                 if top_wrong_sim is None:
                     top_wrong_sim = sim
+                    top_wrong_rerank_score = r_score
 
         if correct_rank is not None:
             status = "HIT"
             correct_similarities.append(correct_sim)
             logger.info(
                 f"[{idx:02d}/{len(golden_set):02d}] HIT  | Rank: {correct_rank:2d} | "
-                f"Correct Sim: {correct_sim:.4f} | Top Wrong Sim: {top_wrong_sim if top_wrong_sim is not None else 'N/A'}"
+                f"Correct Sim: {correct_sim:.4f} (Rerank: {correct_rerank_score:.4f}) | "
+                f"Top Wrong Sim: {top_wrong_sim:.4f} (Rerank: {top_wrong_rerank_score if top_wrong_rerank_score is not None else 'N/A'})"
             )
             print(f"Query: \"{query}\"")
-            print(f"  -> Rank: {correct_rank} | Correct Similarity: {correct_sim:.4f} | Top-1 Wrong Similarity: {top_wrong_sim}\n")
+            print(f"  -> Rank: {correct_rank} | Correct Sim: {correct_sim:.4f} (Rerank Score: {correct_rerank_score:.4f}) | Top-1 Wrong Sim: {top_wrong_sim:.4f} (Rerank Score: {top_wrong_rerank_score})\n")
         else:
             status = "MISS"
             miss_count += 1
