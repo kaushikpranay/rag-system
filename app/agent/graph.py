@@ -199,6 +199,27 @@ Answer:"""
                     "answer": "I'm sorry, I'm experiencing technical difficulties. Please try again shortly.",
                     "truncated": False
                 }
+
+
+# ------- Groundedness Check --------------------
+
+def check_groundedness(answer: str, context: str) -> bool:
+    try:
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        prompt = f"Context:\n{context}\n\nAnswer:\n{answer}\n\nIs this answer fully supported by the context above? Reply with exactly one word: YES or NO."
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=10
+        )
+        res_text = response.choices[0].message.content.strip()
+        is_grounded = res_text.upper().startswith("YES")
+        return is_grounded
+    except Exception as e:
+        logger.warning(f"[check_groundedness] Groundedness check failed: {e}")
+        return True
+
+
 #-------Node 6: Evaluation --------------------
 
 def evaluation_node(state: AgentState)->AgentState:
@@ -229,9 +250,12 @@ def evaluation_node(state: AgentState)->AgentState:
     llm_refused = any(phrase in answer.lower() for phrase in low_confidence_phrases)
 
     if not llm_refused:
-        # LLM gave a confident answer — accept it
-        logger.info(f"[evaluation_node] Confidence: high | Attempt: {retry_count + 1}")
-        return {**state, "confidence": "high", "escalate": False}
+        is_grounded = check_groundedness(state["answer"], state["context"])
+        logger.info(f"[evaluation_node] Groundedness check result: {is_grounded}")
+        if is_grounded:
+            # LLM gave a confident answer — accept it
+            logger.info(f"[evaluation_node] Confidence: high | Attempt: {retry_count + 1}")
+            return {**state, "confidence": "high", "escalate": False}
 
     # LLM couldn't answer — decide: retry or escalate
     if retry_count < 2:

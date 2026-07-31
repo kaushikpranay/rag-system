@@ -198,3 +198,91 @@ def test_llm_node_retry_logic_fails_after_all_retries(mock_groq, mock_sleep):
     assert mock_client.chat.completions.create.call_count == 3
     assert mock_sleep.call_args_list == [((1,),), ((2,),)]
 
+
+@patch("app.agent.graph.Groq")
+def test_check_groundedness_yes(mock_groq):
+    from app.agent.graph import check_groundedness
+    mock_client = MagicMock()
+    mock_groq.return_value = mock_client
+    mock_choice = MagicMock()
+    mock_choice.message.content = "YES"
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_response
+
+    assert check_groundedness("The item costs $10.", "The item costs $10.") is True
+
+
+@patch("app.agent.graph.Groq")
+def test_check_groundedness_no(mock_groq):
+    from app.agent.graph import check_groundedness
+    mock_client = MagicMock()
+    mock_groq.return_value = mock_client
+    mock_choice = MagicMock()
+    mock_choice.message.content = "NO"
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_response
+
+    assert check_groundedness("The item costs $100.", "The item costs $10.") is False
+
+
+@patch("app.agent.graph.Groq")
+def test_check_groundedness_exception_fail_open(mock_groq):
+    from app.agent.graph import check_groundedness
+    mock_client = MagicMock()
+    mock_groq.return_value = mock_client
+    mock_client.chat.completions.create.side_effect = Exception("API error")
+
+    assert check_groundedness("The item costs $10.", "The item costs $10.") is True
+
+
+@patch("app.agent.graph.check_groundedness")
+def test_evaluation_node_un_grounded_retries(mock_grounded):
+    from app.agent.graph import evaluation_node
+    mock_grounded.return_value = False
+
+    state: AgentState = {
+        "query": "test query",
+        "session_id": "s1",
+        "chat_history": [],
+        "retrieved_chunks": [{"content": "c1"}],
+        "context": "c1",
+        "answer": "Hallucinated answer",
+        "confidence": "",
+        "escalate": False,
+        "retry_count": 0,
+        "error": None,
+        "truncated": False,
+    }
+
+    res = evaluation_node(state)
+    assert res["confidence"] == "retry"
+    assert res["retry_count"] == 1
+    assert res["escalate"] is False
+
+
+@patch("app.agent.graph.check_groundedness")
+def test_evaluation_node_un_grounded_escalates(mock_grounded):
+    from app.agent.graph import evaluation_node
+    mock_grounded.return_value = False
+
+    state: AgentState = {
+        "query": "test query",
+        "session_id": "s1",
+        "chat_history": [],
+        "retrieved_chunks": [{"content": "c1"}],
+        "context": "c1",
+        "answer": "Hallucinated answer",
+        "confidence": "",
+        "escalate": False,
+        "retry_count": 2,
+        "error": None,
+        "truncated": False,
+    }
+
+    res = evaluation_node(state)
+    assert res["confidence"] == "low"
+    assert res["escalate"] is True
+
+
