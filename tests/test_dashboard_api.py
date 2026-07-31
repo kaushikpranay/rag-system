@@ -31,7 +31,11 @@ boto3.client = _fake_client
 
 from fastapi.testclient import TestClient
 from app.api.main import app
+from app.utils import config
 from app.api import dashboard as dashboard_module
+
+config.DASHBOARD_PASSWORD_HASH = FAKE_PASSWORD_HASH
+dashboard_module.DASHBOARD_PASSWORD_HASH = FAKE_PASSWORD_HASH
 
 client = TestClient(app)
 AUTH_HEADER = {"Authorization": f"Bearer {FAKE_PASSWORD_HASH}"}
