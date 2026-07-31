@@ -10,7 +10,7 @@ from app.escalation.sqs_worker import receive_from_sqs, delete_from_sqs, get_que
 from app.retrieval.pgvector_client import store_verified_answer
 from app.archive.s3_client import archive_verified_answer
 from app.memory.dynamodb_client import save_session
-from app.utils.config import DASHBOARD_PASSWORD_HASH
+from app.utils import config
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def verify_dashboard_auth(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing credentials")
     token = authorization.removeprefix("Bearer ")
-    if token != DASHBOARD_PASSWORD_HASH:
+    if token != config.DASHBOARD_PASSWORD_HASH:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
 
@@ -54,7 +54,7 @@ class ResolveRequest(BaseModel):
 
 @router.post("/login")
 def login(body: LoginRequest):
-    if body.password_hash != DASHBOARD_PASSWORD_HASH:
+    if body.password_hash != config.DASHBOARD_PASSWORD_HASH:
         raise HTTPException(status_code=401, detail="Incorrect password")
     return {"ok": True}
 
