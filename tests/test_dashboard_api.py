@@ -10,8 +10,10 @@ os.environ.setdefault("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/9615
 os.environ.setdefault("S3_BUCKET_NAME", "rag-system-kaushik-pranay")
 os.environ.setdefault("DYNAMODB_TABLE", "rag-session-memory")
 os.environ.setdefault("AWS_REGION", "us-east-1")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
+if not os.environ.get("AWS_ACCESS_KEY_ID"):
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+if not os.environ.get("AWS_SECRET_ACCESS_KEY"):
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 
 REAL_PASSWORD_HASH = "c35aa6069fd4489ca784a6f2e82c9099287f9abe22f17e5a194940c43e983633"
 os.environ["DASHBOARD_PASSWORD_HASH"] = REAL_PASSWORD_HASH
