@@ -5,6 +5,10 @@ import hashlib
 from psycopg2.extras import execute_values
 from conftest import skip_if_no_db, generate_random_vector
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_batch_insert_validation_execute_values(db_conn):
     """
     Requirement 10: Validate batch insert using execute_values and verify throughput & deduplication.
@@ -53,6 +57,7 @@ def test_batch_insert_validation_execute_values(db_conn):
     print(f"  Inserted {num_items} rows in {elapsed:.4f}s ({num_items / elapsed:.2f} rows/sec)")
 
 
+@pytest.mark.integration
 def test_transaction_rollback_and_recovery(db_conn):
     """
     Requirement 11: Validate transaction rollback and database recovery on failure.

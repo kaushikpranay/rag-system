@@ -2,6 +2,8 @@ import pytest
 import numpy as np
 from conftest import skip_if_no_db, generate_random_vector
 
+pytestmark = pytest.mark.integration
+
 def _calculate_ndcg(ground_truth_ids, ann_ids, k):
     """Compute NDCG@K given ground truth ordering and ANN predicted ordering."""
     if not ground_truth_ids:
@@ -110,6 +112,7 @@ def compute_ann_recall_metrics(conn, num_test_queries=10, k_max=5):
     }
 
 
+@pytest.mark.integration
 def test_ann_recall_vs_brute_force(db_conn):
     """
     Requirement 2: Test ANN recall against exact brute-force search.

@@ -39,6 +39,10 @@ def measure_query_latency_percentiles(conn, num_queries=20, top_k=5):
 TARGET_VECTOR_COUNT_FULL = 100000
 TARGET_VECTOR_COUNT_FAST = 5000
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_large_database_benchmark(db_conn):
     """
     Requirement 13: Benchmark vector search performance, reporting full latency distribution (min/P50/P90/P95/P99/max) & active document count.

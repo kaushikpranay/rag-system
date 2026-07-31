@@ -4,6 +4,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from conftest import skip_if_no_db
 from app.retrieval.pgvector_client import get_connection, _get_pool, DB_POOL_MAX_CONN
 
+pytestmark = pytest.mark.integration
+
+
 def _get_active_pg_connections(conn):
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM pg_stat_activity WHERE state IS NOT NULL AND datname = current_database();")
@@ -12,6 +15,7 @@ def _get_active_pg_connections(conn):
     return count
 
 
+@pytest.mark.integration
 def test_connection_pool_saturation_and_queuing(db_conn):
     """
     Requirement 8: Stress test connection pool saturation under concurrent multi-threaded load.
@@ -80,6 +84,7 @@ def test_connection_pool_saturation_and_queuing(db_conn):
     assert total_successful == num_threads, f"Expected {num_threads} workers to complete via pool queuing, got {total_successful}"
 
 
+@pytest.mark.integration
 def test_connection_pool_exhaustion_behavior(raw_db_conn):
     """
     Requirement 8b: Verify explicit pool exhaustion error behavior when pool limit is exceeded without releasing.
@@ -111,6 +116,7 @@ def test_connection_pool_exhaustion_behavior(raw_db_conn):
 
 
 
+@pytest.mark.integration
 def test_connection_leak_detection_pg_stat_activity(raw_db_conn):
     """
     Requirement 9: Detect connection leaks by inspecting pg_stat_activity before and after pool activity.

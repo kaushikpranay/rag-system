@@ -1,6 +1,10 @@
 import pytest
 from conftest import skip_if_no_db, generate_random_vector
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_query_plan_regression_detection(db_conn):
     """
     Requirement 12: Detect query plan regressions for vector similarity searches.

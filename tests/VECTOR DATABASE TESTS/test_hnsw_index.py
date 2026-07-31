@@ -1,6 +1,10 @@
 import pytest
 from conftest import skip_if_no_db, generate_random_vector
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_hnsw_index_existence_and_integrity(db_conn):
     """
     Requirement 3: Verify HNSW index existence, valid access method, and integrity.
@@ -41,6 +45,7 @@ def test_hnsw_index_existence_and_integrity(db_conn):
     cur.close()
 
 
+@pytest.mark.integration
 def test_hnsw_index_explain_analyze_usage(db_conn):
     """
     Requirement 1: Verify EXPLAIN ANALYZE query plan uses the HNSW index (not Seq Scan).

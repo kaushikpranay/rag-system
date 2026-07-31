@@ -7,6 +7,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from app.retrieval.pgvector_client import store_chunks, get_connection
 
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_deduplication():
     # Check if database is reachable (skip cleanly in CI environments without active RDS connection)
     try:

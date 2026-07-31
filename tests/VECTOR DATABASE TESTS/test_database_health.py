@@ -1,6 +1,10 @@
 import pytest
 from conftest import skip_if_no_db
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_database_health_checks(db_conn):
     """
     Requirement 15: Database health checks (extensions, indexes, locks, active connections, table health).

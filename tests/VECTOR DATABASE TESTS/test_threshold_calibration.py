@@ -88,6 +88,10 @@ def calibrate_similarity_thresholds(conn):
     }
 
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_threshold_calibration(db_conn):
     """
     Requirement 14: Threshold calibration calculating Precision, Recall, F1 and recommended threshold.

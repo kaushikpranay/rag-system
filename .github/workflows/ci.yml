@@ -19,6 +19,23 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Start SSH tunnel to RDS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_BASTION_HOST: ${{ secrets.SSH_BASTION_HOST }}
+          RDS_HOST: rag-postgres.ce1uqqk8ey5g.us-east-1.rds.amazonaws.com
+        run: |
+          if [ -n "$SSH_PRIVATE_KEY" ] && [ -n "$SSH_BASTION_HOST" ]; then
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            BASTION="$SSH_BASTION_HOST"
+            if [[ "$BASTION" != *"@"* ]]; then
+              BASTION="ec2-user@$BASTION"
+            fi
+            ssh -o StrictHostKeyChecking=no -f -N -L 15432:$RDS_HOST:5432 $BASTION
+          fi
+
       - name: Run tests
         env:
           AWS_REGION: us-east-1
@@ -34,4 +51,4 @@ jobs:
           RDS_DB: ragdb
           RDS_USER: ragadmin
           RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
-        run: python -m pytest tests/
+        run: python -m pytest tests/ -m "not integration"

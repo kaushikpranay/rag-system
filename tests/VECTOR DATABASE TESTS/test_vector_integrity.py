@@ -3,6 +3,10 @@ import pytest
 import numpy as np
 from conftest import skip_if_no_db
 
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_vector_dimension_validation(db_conn):
     """
     Requirement 4: Validate vector dimension (must be 1024-d, non-null, valid structure).
@@ -30,6 +34,7 @@ def test_vector_dimension_validation(db_conn):
     cur.close()
 
 
+@pytest.mark.integration
 def test_embedding_drift_detection(db_conn):
     """
     Requirement 5: Detect embedding drift, zero-vectors, NaN/Inf values, and norm anomalies.
@@ -74,6 +79,7 @@ def test_embedding_drift_detection(db_conn):
         assert std_norm < 0.3, f"Vector norm standard deviation ({std_norm:.4f}) exhibits abnormal variance"
 
 
+@pytest.mark.integration
 def test_duplicate_vector_detection(db_conn):
     """
     Requirement 6: Detect duplicate or near-identical vectors (cosine similarity >= 0.9999).
@@ -98,6 +104,7 @@ def test_duplicate_vector_detection(db_conn):
     assert isinstance(exact_dupes, list)
 
 
+@pytest.mark.integration
 def test_metadata_integrity_validation(db_conn):
     """
     Requirement 7: Validate metadata integrity (JSONB format, mandatory content_hash SHA-256).

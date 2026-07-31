@@ -40,20 +40,25 @@ elif _check_port(5432):
     os.environ["RDS_HOST"] = "127.0.0.1"
     os.environ["RDS_PORT"] = "5432"
 
-from app.utils.config import RDS_HOST, RDS_PORT, RDS_DB, RDS_USER, RDS_PASSWORD
-from app.retrieval.pgvector_client import get_connection, init_db, _get_pool
+def _get_config_vars():
+    try:
+        from app.utils.config import RDS_HOST, RDS_PORT, RDS_DB, RDS_USER, RDS_PASSWORD
+        return RDS_HOST, RDS_PORT, RDS_DB, RDS_USER, RDS_PASSWORD
+    except Exception:
+        return None, 5432, "ragdb", "ragadmin", ""
 
 
 def is_db_available() -> bool:
-    host = os.getenv("RDS_HOST", RDS_HOST or "localhost")
-    port = os.getenv("RDS_PORT", RDS_PORT or 5432)
+    RDS_HOST_CFG, RDS_PORT_CFG, RDS_DB_CFG, RDS_USER_CFG, RDS_PASSWORD_CFG = _get_config_vars()
+    host = os.getenv("RDS_HOST", RDS_HOST_CFG or "localhost")
+    port = os.getenv("RDS_PORT", RDS_PORT_CFG or 5432)
     try:
         conn = psycopg2.connect(
             host=host,
             port=port,
-            dbname=RDS_DB,
-            user=RDS_USER,
-            password=RDS_PASSWORD,
+            dbname=RDS_DB_CFG,
+            user=RDS_USER_CFG,
+            password=RDS_PASSWORD_CFG,
             connect_timeout=3
         )
         conn.close()
@@ -90,14 +95,15 @@ def db_conn(db_session_init):
 @pytest.fixture(scope="function")
 def raw_db_conn():
     skip_if_no_db()
-    host = os.getenv("RDS_HOST", RDS_HOST or "localhost")
-    port = os.getenv("RDS_PORT", RDS_PORT or 5432)
+    RDS_HOST_CFG, RDS_PORT_CFG, RDS_DB_CFG, RDS_USER_CFG, RDS_PASSWORD_CFG = _get_config_vars()
+    host = os.getenv("RDS_HOST", RDS_HOST_CFG or "localhost")
+    port = os.getenv("RDS_PORT", RDS_PORT_CFG or 5432)
     conn = psycopg2.connect(
         host=host,
         port=port,
-        dbname=RDS_DB,
-        user=RDS_USER,
-        password=RDS_PASSWORD,
+        dbname=RDS_DB_CFG,
+        user=RDS_USER_CFG,
+        password=RDS_PASSWORD_CFG,
         connect_timeout=5
     )
     try:
