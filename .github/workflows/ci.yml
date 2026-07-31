@@ -20,4 +20,14 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run tests
+        env:
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+          SQS_QUEUE_URL: https://sqs.us-east-1.amazonaws.com/000000000000/fake
+          S3_BUCKET_NAME: fake-bucket
+          DYNAMODB_TABLE: fake-table
+          DASHBOARD_PASSWORD_HASH: fake-/rag-system/DASHBOARD_PASSWORD_HASH
+          GROQ_API_KEY: fake-groq-api-key
+          RDS_PASSWORD: fake-rds-password
         run: python -m pytest tests/
