@@ -68,6 +68,7 @@ def test_resolve_invokes_all_four_writes(monkeypatch):
     monkeypatch.setattr(dashboard_module, "archive_verified_answer", lambda s, q, a: calls.append("s3") or True)
     monkeypatch.setattr(dashboard_module, "save_session", lambda s, q, a: calls.append("dynamodb"))
     monkeypatch.setattr(dashboard_module, "delete_from_sqs", lambda r: calls.append("sqs") or True)
+    monkeypatch.setattr(dashboard_module, "clear_pending", lambda q: calls.append("clear_pending") or True)
 
     body = {
         "receipt_handle": "abc123",
@@ -78,8 +79,8 @@ def test_resolve_invokes_all_four_writes(monkeypatch):
     r = client.post("/dashboard/escalations/resolve", json=body, headers=AUTH_HEADER)
 
     assert r.status_code == 200
-    assert r.json() == {"resolved": True, "rds_ok": True, "s3_ok": True, "sqs_ok": True}
-    assert calls == ["rds", "s3", "dynamodb", "sqs"]
+    assert r.json() == {"resolved": True, "rds_ok": True, "s3_ok": True, "sqs_ok": True, "pending_cleared": True}
+    assert calls == ["rds", "s3", "dynamodb", "sqs", "clear_pending"]
 
 
 def test_resolve_rejects_invalid_session_id():

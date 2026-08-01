@@ -138,7 +138,7 @@ def manual_escalate(request: Request, body: QueryRequest):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    send_to_sqs(session_id, body.query, "Manual escalation requested")
+    send_to_sqs(session_id, body.query, "")
     return {"escalated": True, "session_id": session_id}
 
 @app.get("/queue-status/{session_id}")
@@ -170,6 +170,7 @@ def queue_status(request: Request, session_id: str, query: str = ""):
 
             if not row:
                 # Priority 2: Match ANY session with same query (cross-user sharing)
+                # Cross-session answer sharing is intentional (see README: Cross-User Knowledge Sharing feature) — verified answers to identical queries are shared across all users/sessions. This is a deliberate design choice, not a scoping bug.
                 cur.execute(
                     "SELECT content FROM documents WHERE metadata->>'source' = 'human_verified' AND LOWER(metadata->>'query') = LOWER(%s) ORDER BY id DESC LIMIT 1",
                     (query.strip(),)

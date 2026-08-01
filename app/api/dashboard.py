@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
 from app.api.rate_limit import limiter
-from app.escalation.sqs_worker import receive_from_sqs, delete_from_sqs, get_queue_depth
+from app.escalation.sqs_worker import receive_from_sqs, delete_from_sqs, get_queue_depth, clear_pending
 from app.retrieval.pgvector_client import store_verified_answer
 from app.archive.s3_client import archive_verified_answer
 from app.memory.dynamodb_client import save_session
@@ -79,7 +79,7 @@ def list_escalations(request: Request, max_messages: int = 5):
             "receipt_handle": msg.get("ReceiptHandle", ""),
             "session_id": body.get("session_id", "unknown"),
             "query": body.get("query", ""),
-            "answer": body.get("answer", ""),
+            "answer": body.get("answer") or "[No LLM answer — manually escalated by user]",
         })
     return escalations
 
@@ -91,10 +91,12 @@ def resolve_escalation(request: Request, body: ResolveRequest):
     s3_ok = archive_verified_answer(body.session_id, body.query, body.answer)
     save_session(body.session_id, body.query, f"[VERIFIED BY AGENT] {body.answer}")
     sqs_ok = delete_from_sqs(body.receipt_handle)
+    pending_cleared = clear_pending(body.query) if sqs_ok else False
 
     return {
         "resolved": rds_ok and s3_ok and sqs_ok,
         "rds_ok": rds_ok,
         "s3_ok": s3_ok,
         "sqs_ok": sqs_ok,
+        "pending_cleared": pending_cleared,
     }
