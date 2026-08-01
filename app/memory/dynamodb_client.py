@@ -7,6 +7,7 @@ load_dotenv()
 
 DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "rag-session-memory")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+MAX_HISTORY_TURNS = 20
 
 dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
 table = dynamodb.Table(DYNAMODB_TABLE)
@@ -30,6 +31,9 @@ def save_session(session_id: str, query: str, answer: str) -> None:
             "answer": answer,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
+        if len(history) > MAX_HISTORY_TURNS:
+            print(f"[dynamodb] Trimming session {session_id} history from {len(history)} to {MAX_HISTORY_TURNS} entries")
+            history = history[-MAX_HISTORY_TURNS:]
         ttl = int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp())
         table.put_item(Item={
             "session_id": session_id,

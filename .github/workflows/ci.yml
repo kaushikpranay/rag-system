@@ -44,6 +44,7 @@ jobs:
           SQS_QUEUE_URL: https://sqs.us-east-1.amazonaws.com/961546607247/rag-escalation-queue
           S3_BUCKET_NAME: rag-system-kaushik-pranay
           DYNAMODB_TABLE: rag-session-memory
+          DYNAMODB_PENDING_TABLE: rag-pending-escalations
           DASHBOARD_PASSWORD_HASH: c35aa6069fd4489ca784a6f2e82c9099287f9abe22f17e5a194940c43e983633
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           RDS_HOST: rag-postgres.ce1uqqk8ey5g.us-east-1.rds.amazonaws.com

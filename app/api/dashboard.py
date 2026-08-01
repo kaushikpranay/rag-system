@@ -1,3 +1,4 @@
+import hmac
 import json
 import logging
 import uuid
@@ -21,7 +22,7 @@ def verify_dashboard_auth(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing credentials")
     token = authorization.removeprefix("Bearer ")
-    if token != config.DASHBOARD_PASSWORD_HASH:
+    if not hmac.compare_digest(token, config.DASHBOARD_PASSWORD_HASH):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
 
@@ -54,7 +55,7 @@ class ResolveRequest(BaseModel):
 
 @router.post("/login")
 def login(body: LoginRequest):
-    if body.password_hash != config.DASHBOARD_PASSWORD_HASH:
+    if not hmac.compare_digest(body.password_hash, config.DASHBOARD_PASSWORD_HASH):
         raise HTTPException(status_code=401, detail="Incorrect password")
     return {"ok": True}
 
