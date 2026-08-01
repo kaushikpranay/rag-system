@@ -1,24 +1,18 @@
+import os
+import uuid
 import logging
-import re
-from app.escalation.sqs_worker import send_to_sqs
+from typing import Optional
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, field_validator
-from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from typing import Optional
-import uuid
-import sys
-import os
-
-# Rate limiting
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from fastapi.middleware.cors import CORSMiddleware
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from app.agent.graph import run_agent
-from contextlib import asynccontextmanager
+from app.escalation.sqs_worker import send_to_sqs
 from app.retrieval.pgvector_client import get_connection, init_db
 from app.utils.sanitizer import sanitize_query, detect_prompt_injection, mask_pii
 from app.api.rate_limit import limiter

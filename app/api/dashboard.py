@@ -65,24 +65,29 @@ def queue_depth():
     return {"depth": get_queue_depth()}
 
 
+# ponytail: helper to safely parse SQS JSON message body
+def _parse_msg_body(raw_body: str) -> dict:
+    try:
+        return json.loads(raw_body) if raw_body else {}
+    except Exception:
+        return {}
+
+
 @router.get("/escalations", dependencies=[Depends(verify_dashboard_auth)])
 @limiter.limit("30/minute")
 def list_escalations(request: Request, max_messages: int = 5):
     messages = receive_from_sqs(max_messages=max_messages)
-    escalations = []
-    for msg in messages:
-        try:
-            body = json.loads(msg.get("Body", "{}"))
-        except Exception:
-            body = {}
-        escalations.append({
+    # ponytail: list comprehension for building escalation payload
+    return [
+        {
             "message_id": msg.get("MessageId", ""),
             "receipt_handle": msg.get("ReceiptHandle", ""),
-            "session_id": body.get("session_id", "unknown"),
+            "session_id": (body := _parse_msg_body(msg.get("Body"))).get("session_id", "unknown"),
             "query": body.get("query", ""),
             "answer": body.get("answer") or "[No LLM answer — manually escalated by user]",
-        })
-    return escalations
+        }
+        for msg in messages
+    ]
 
 
 @router.post("/escalations/resolve", dependencies=[Depends(verify_dashboard_auth)])
