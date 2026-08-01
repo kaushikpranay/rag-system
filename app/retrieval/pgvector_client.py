@@ -24,22 +24,6 @@ def _check_port(port: int, host: str = "127.0.0.1") -> bool:
     except Exception:
         return False
 
-env_host = os.getenv("RDS_HOST", "").strip()
-env_port = int(os.getenv("RDS_PORT", "5432"))
-
-if _check_port(TUNNEL_LOCAL_PORT):
-    os.environ["RDS_HOST"] = "127.0.0.1"
-    os.environ["RDS_PORT"] = str(TUNNEL_LOCAL_PORT)
-elif env_host and env_host not in ("localhost", "127.0.0.1") and _check_port(env_port, env_host):
-    os.environ["RDS_HOST"] = env_host
-    os.environ["RDS_PORT"] = str(env_port)
-else:
-    raise RuntimeError(
-        f"Cannot reach database: SSH tunnel on 127.0.0.1:{TUNNEL_LOCAL_PORT} "
-        f"is down and RDS host {env_host or '(not set)'}:{env_port} is unreachable. "
-        f"Start a tunnel or fix RDS_HOST/RDS_PORT in .env."
-    )
-
 from app.utils.config import RDS_HOST, RDS_PORT, RDS_DB, RDS_USER, RDS_PASSWORD, AWS_REGION
 
 logger = logging.getLogger(__name__)
@@ -53,6 +37,27 @@ _reranker_model = None
 
 # Reuse a single Bedrock client instead of creating one per-call
 _bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+
+
+def _resolve_db_config():
+    env_host = (RDS_HOST or "").strip()
+    try:
+        env_port = int(RDS_PORT)
+    except (ValueError, TypeError):
+        env_port = 5432
+
+    if _check_port(TUNNEL_LOCAL_PORT):
+        return "127.0.0.1", TUNNEL_LOCAL_PORT
+    if env_host and env_host not in ("localhost", "127.0.0.1") and _check_port(env_port, env_host):
+        return env_host, env_port
+    if _check_port(env_port, "127.0.0.1"):
+        return "127.0.0.1", env_port
+
+    raise RuntimeError(
+        f"Cannot reach database: SSH tunnel on 127.0.0.1:{TUNNEL_LOCAL_PORT} "
+        f"is down and RDS host {env_host or '(not set)'}:{env_port} is unreachable. "
+        f"Start a tunnel or fix RDS_HOST/RDS_PORT in .env."
+    )
 
 
 def _get_reranker():
@@ -71,12 +76,13 @@ def _get_reranker():
 def _get_pool():
     global _pool
     if _pool is None or getattr(_pool, "closed", False):
+        host, port = _resolve_db_config()
         try:
             _pool = ThreadedConnectionPool(
                 minconn=DB_POOL_MIN_CONN,
                 maxconn=DB_POOL_MAX_CONN,
-                host=RDS_HOST,
-                port=RDS_PORT,
+                host=host,
+                port=port,
                 dbname=RDS_DB,
                 user=RDS_USER,
                 password=RDS_PASSWORD
