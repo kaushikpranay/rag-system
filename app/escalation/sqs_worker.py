@@ -16,10 +16,14 @@ dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
 pending_table = dynamodb.Table(DYNAMODB_PENDING_TABLE)
 
 
+# ponytail: helper to compute SHA256 hash of normalized query
+def _hash_query(query: str) -> str:
+    return hashlib.sha256(query.strip().lower().encode("utf-8")).hexdigest()
+
+
 def is_duplicate_pending(query: str) -> bool:
     try:
-        normalized = query.strip().lower()
-        query_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        query_hash = _hash_query(query)
         response = pending_table.get_item(Key={"query_hash": query_hash})
         item = response.get("Item")
         if not item:
@@ -36,8 +40,7 @@ def is_duplicate_pending(query: str) -> bool:
 
 def mark_pending(query: str) -> None:
     try:
-        normalized = query.strip().lower()
-        query_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        query_hash = _hash_query(query)
         now = datetime.now(timezone.utc)
         created_at = now.isoformat()
         expires_at = int((now + timedelta(hours=1)).timestamp())
@@ -53,8 +56,7 @@ def mark_pending(query: str) -> None:
 
 def clear_pending(query: str) -> bool:
     try:
-        normalized = query.strip().lower()
-        query_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        query_hash = _hash_query(query)
         pending_table.delete_item(Key={"query_hash": query_hash})
         print(f"[dynamodb] Pending escalation cleared for query: {query}")
         return True

@@ -84,6 +84,13 @@ def retrieval_node(state: AgentState) -> AgentState:
         return {**state, "retrieved_chunks": []}
 
 
+# ponytail: helper to format retrieved context chunks cleanly without duplication
+def _format_context_chunks(chunks: List[dict]) -> str:
+    return "\n\n".join(
+        f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
+        for i, c in enumerate(chunks)
+    )
+
 #------Node 4: Context -----------------
 def context_node(state: AgentState) -> AgentState:
     chunks = list(state.get("retrieved_chunks", []))
@@ -94,10 +101,7 @@ def context_node(state: AgentState) -> AgentState:
     elif not chunks:
         context = "No relevant context found"
     else:
-        context = "\n\n".join([
-            f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
-            for i, c in enumerate(chunks)
-        ])
+        context = _format_context_chunks(chunks)
 
     est_tokens = len(context) // 4
     if est_tokens > 6000 and chunks:
@@ -109,10 +113,7 @@ def context_node(state: AgentState) -> AgentState:
             if not sorted_chunks:
                 context = "No relevant context found"
             else:
-                context = "\n\n".join([
-                    f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
-                    for i, c in enumerate(sorted_chunks)
-                ])
+                context = _format_context_chunks(sorted_chunks)
 
         chunks = sorted_chunks
         final_est_tokens = len(context) // 4
@@ -132,15 +133,12 @@ def llm_node(state: AgentState) -> AgentState:
     context = state["context"]
     chat_history = state["chat_history"]
 
-    # Build history string from DynamoDB format {"query", "answer", "timestamp"}
-    history_str = ""
-    for msg in chat_history[-4:]:
-        q = msg.get("query", "")
-        a = msg.get("answer", "")
-        if q:
-            history_str += f"User: {q}\n"
-        if a:
-            history_str += f"Assistant: {a}\n"
+    # ponytail: simplified history string construction from chat history turns
+    history_str = "".join(
+        (f"User: {msg['query']}\n" if msg.get("query") else "")
+        + (f"Assistant: {msg['answer']}\n" if msg.get("answer") else "")
+        for msg in chat_history[-4:]
+    )
 
     prompt = f"""You are a helpful customer care assistant. Use the following information to answer the user's question:
 
