@@ -1,6 +1,16 @@
+"""
+Retrieval Tests — Multi-Hop Question Answering
+File: tests/RETRIEVAL TESTS/test_multihop.py
+"""
 import pytest
 
-pytestmark = pytest.mark.integration
 
-# test_multihop.py
-# Multi-hop retrieval — chunking too small/fragmented
+@pytest.mark.integration
+@pytest.mark.skip(reason="requires live LLM/DB — run manually, not automated in CI")
+def test_multihop_reasoning():
+    """
+    Manual Verification Test:
+    Verify multi-hop queries requiring synthesis across multiple retrieved chunks
+    are answered accurately using live pgvector + Groq graph execution.
+    """
+    pass

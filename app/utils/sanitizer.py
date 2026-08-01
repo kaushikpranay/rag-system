@@ -70,7 +70,7 @@ _INJECTION_PATTERNS = [
     re.compile(r'disregard\s+(all\s+)?previous', re.IGNORECASE),
     re.compile(r'forget\s+(everything|all)\s+(above|before|previous)', re.IGNORECASE),
     # System prompt extraction
-    re.compile(r'(show|reveal|print|output|display)\s+(your|the|system)\s+(prompt|instructions|rules)', re.IGNORECASE),
+    re.compile(r'(show|reveal|print|output|display)\s+((your|the|system)\s+)*(prompt|instructions|rules)', re.IGNORECASE),
     re.compile(r'what\s+are\s+your\s+(system\s+)?(instructions|rules|directives)', re.IGNORECASE),
     # Role-play / jailbreak
     re.compile(r'you\s+are\s+now\s+(DAN|a\s+new|an?\s+unrestricted)', re.IGNORECASE),
