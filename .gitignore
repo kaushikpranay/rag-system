@@ -11,6 +11,7 @@ graphify-out/
 .tokensaver/
 .claude/
 .agent/
+.agents/
 pytest-cache-files*/
 PROJECT_CONTEXT.txt
 PROJECT_CONTEXT_FULL.txt
