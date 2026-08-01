@@ -39,12 +39,6 @@ elif env_host and env_host not in ("localhost", "127.0.0.1") and _check_port(env
 elif _check_port(env_port, "127.0.0.1"):
     os.environ["RDS_HOST"] = "127.0.0.1"
     os.environ["RDS_PORT"] = str(env_port)
-else:
-    raise RuntimeError(
-        f"Cannot reach database: SSH tunnel on 127.0.0.1:{TUNNEL_LOCAL_PORT} "
-        f"is down and RDS host {env_host or '(not set)'}:{env_port} is unreachable. "
-        f"Start a tunnel or fix RDS_HOST/RDS_PORT in .env."
-    )
 
 def _get_config_vars():
     try:
