@@ -1,6 +1,6 @@
 """
 Retrieval Tests — Negative Retrieval & Unrelated Queries
-File: tests/RETRIEVAL TESTS/test_negative_retrieval.py
+File: tests/retrieval_tests/test_negative_retrieval.py
 """
 import pytest
 

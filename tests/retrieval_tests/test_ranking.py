@@ -1,6 +1,6 @@
 """
 Retrieval Tests — Chunk Ranking & Reranking Order
-File: tests/RETRIEVAL TESTS/test_ranking.py
+File: tests/retrieval_tests/test_ranking.py
 """
 import pytest
 from unittest.mock import patch, MagicMock

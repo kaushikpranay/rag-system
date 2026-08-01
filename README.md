@@ -46,14 +46,14 @@ rag-system/
 │   ├── chat/          # End-user chat interface (React)
 │   └── dashboard/     # Agent dashboard interface (React)
 ├── tests/             # Pytest test cases and evaluation suites
-│   ├── RETRIEVAL TESTS/
+│   ├── retrieval_tests/
 │   │   ├── golden_set.json                # Ground-truth test queries
 │   │   ├── measure_thresholds.py          # Precision and recall evaluation
 │   │   ├── verify_embedding_integrity.py  # Stored vector integrity check
 │   │   ├── diagnose_regression.py         # DB audit and vector dimension verification
 │   │   ├── run_ingestion.py               # Ingestion runner script
 │   │   └── truncate_documents.py          # Reset helper script
-│   └── VECTOR DATABASE TESTS/
+│   └── vector_database_tests/
 │       ├── test_ann_recall.py             # Recall@1, Recall@3, Recall@5 accuracy tests
 │       ├── test_hnsw_index.py             # EXPLAIN query plan index verification
 │       ├── test_connection_pool.py        # Pool health & concurrency tests
@@ -70,13 +70,13 @@ To verify database integrity, test retrieval accuracy, and run vector database b
 
 ```bash
 # Run 18 golden-set retrieval accuracy benchmark (with cross-encoder reranking)
-.venv\Scripts\python.exe "tests/RETRIEVAL TESTS/measure_thresholds.py"
+.venv\Scripts\python.exe "tests/retrieval_tests/measure_thresholds.py"
 
 # Verify vector integrity (compares stored vs fresh Bedrock embeddings)
-.venv\Scripts\python.exe "tests/RETRIEVAL TESTS/verify_embedding_integrity.py"
+.venv\Scripts\python.exe "tests/retrieval_tests/verify_embedding_integrity.py"
 
 # Run full Vector Database & pgvector benchmark suite
-.venv\Scripts\python.exe -m pytest "tests/VECTOR DATABASE TESTS/"
+.venv\Scripts\python.exe -m pytest "tests/vector_database_tests/"
 ```
 
 ### Measured Performance
