@@ -43,15 +43,17 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.integration
-def test_large_database_benchmark(db_conn):
+def test_synthetic_latency_benchmark(db_conn):
     """
-    Requirement 13: Benchmark vector search performance, reporting full latency distribution (min/P50/P90/P95/P99/max) & active document count.
+    Synthetic isolated latency benchmark — measures HNSW query latency against a
+    separate `documents_benchmark` table populated with random vectors.
 
-    Benchmarking Execution Modes:
-    - Full Scale Mode (Default): Scales synthetic vector dataset to 100,000+ vectors (`TARGET_VECTOR_COUNT_FULL = 100000`)
-      to measure large-scale HNSW indexing latency against a realistic vector DB corpus.
-    - Fast / CI Mode (Set `FAST_BENCHMARK=1` or pass `--fast`): Limits synthetic population to 5,000 vectors
-      (`TARGET_VECTOR_COUNT_FAST = 5000`) for fast CI test execution.
+    NOTE: This does NOT benchmark production data (the ~820-row `documents` table).
+    It exercises pgvector/HNSW index performance in isolation with synthetic vectors.
+
+    Execution Modes:
+    - Full Scale Mode (Default): Populates to 100,000 synthetic vectors.
+    - Fast / CI Mode (`FAST_BENCHMARK=1`): Limits to 5,000 synthetic vectors.
     """
     skip_if_no_db()
     import sys

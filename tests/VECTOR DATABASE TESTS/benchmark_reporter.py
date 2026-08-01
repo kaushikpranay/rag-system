@@ -16,7 +16,7 @@ if PROJECT_ROOT not in sys.path:
 from conftest import is_db_available, generate_random_vector
 from app.retrieval.pgvector_client import get_connection, _get_pool
 from test_ann_recall import compute_ann_recall_metrics
-from test_large_db_benchmark import measure_query_latency_percentiles
+from test_synthetic_latency_benchmark import measure_query_latency_percentiles
 from test_threshold_calibration import calibrate_similarity_thresholds
 
 def run_benchmarks_and_generate_report():
