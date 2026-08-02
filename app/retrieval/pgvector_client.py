@@ -6,7 +6,6 @@ import socket
 import json
 import difflib
 import boto3
-import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv

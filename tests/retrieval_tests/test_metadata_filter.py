@@ -1,6 +1,6 @@
 """
 Retrieval Tests — Metadata Filtering
-File: tests/RETRIEVAL TESTS/test_metadata_filter.py
+File: tests/retrieval_tests/test_metadata_filter.py
 """
 import pytest
 

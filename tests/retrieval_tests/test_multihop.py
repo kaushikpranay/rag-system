@@ -1,6 +1,6 @@
 """
 Retrieval Tests — Multi-Hop Question Answering
-File: tests/RETRIEVAL TESTS/test_multihop.py
+File: tests/retrieval_tests/test_multihop.py
 """
 import pytest
 from app.retrieval.pgvector_client import retrieve_similar

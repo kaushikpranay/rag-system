@@ -1,6 +1,6 @@
 """
 Regression Tests — Golden Set Baseline & Similarity Drift
-File: tests/REGRESSION TESTS/test_golden_set_regression.py
+File: tests/regression_tests/test_golden_set_regression.py
 """
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ import pytest
 
 
 def _load_golden_set_and_results():
-    dir_path = Path(__file__).parent.parent / "RETRIEVAL TESTS"
+    dir_path = Path(__file__).parent.parent / "retrieval_tests"
     golden_set_path = dir_path / "golden_set.json"
     threshold_results_path = dir_path / "threshold_results.json"
 

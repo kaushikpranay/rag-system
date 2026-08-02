@@ -6,6 +6,11 @@ venv/
 .venv_dev/
 node_modules/
 dist/
+dist-ssr/
+*.local
+*.log
+.DS_Store
+pgvector/
 graphify-out/
 .tokensave/
 .tokensaver/
