@@ -59,7 +59,7 @@ def retrieval_node(state: AgentState) -> AgentState:
     logger.info(f"[retrieval_node] Retrieving chunks (attempt {retry_count + 1}/3)")
 
     # Widen search parameters on each retry
-    human_threshold = max(0.40, 0.55 - (retry_count * 0.05))  # 0.55 → 0.50 → 0.45
+    human_threshold = max(0.25, 0.45 - (retry_count * 0.10))  # 0.45 → 0.35 → 0.25
     top_k = 5 + (retry_count * 3)                              # 5 → 8 → 11
     min_sim = max(0.10, 0.30 - (retry_count * 0.10))           # 0.30 → 0.20 → 0.10
 
@@ -245,6 +245,7 @@ def evaluation_node(state: AgentState)->AgentState:
     "the context does not",
     "not mentioned in the context",
     "no relevant context",
+    "technical difficulties",
     ]
 
     llm_refused = any(phrase in answer.lower() for phrase in low_confidence_phrases)
