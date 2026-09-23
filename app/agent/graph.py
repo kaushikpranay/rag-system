@@ -172,7 +172,7 @@ Answer:"""
     for attempt in range(max_retries + 1):
         try:
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="qwen/qwen3.8-27b",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=512
             )
@@ -208,7 +208,7 @@ def check_groundedness(answer: str, context: str) -> bool:
         client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         prompt = f"Context:\n{context}\n\nAnswer:\n{answer}\n\nIs this answer fully supported by the context above? Reply with exactly one word: YES or NO."
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="qwen/qwen3.8-27b",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=10
         )
