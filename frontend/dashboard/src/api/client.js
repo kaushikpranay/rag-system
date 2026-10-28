@@ -1,4 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
+const rawUrl = import.meta.env.VITE_API_BASE_URL || ''
+const BASE_URL = (!rawUrl || rawUrl.includes('3-234-247-185'))
+  ? 'https://3-27-156-144.sslip.io'
+  : rawUrl
 const AUTH_KEY = 'dashboard_password_hash'
 
 export async function sha256Hex(text) {

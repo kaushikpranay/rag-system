@@ -5,6 +5,7 @@ export function AnswerForm({ onSubmit }) {
   const [answer, setAnswer] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
 
   const submit = async () => {
     if (!answer.trim()) {
@@ -13,9 +14,12 @@ export function AnswerForm({ onSubmit }) {
     }
     setSubmitting(true)
     setError(null)
+    setSuccess(false)
     const result = await onSubmit(answer.trim())
     setSubmitting(false)
-    if (!result.resolved) {
+    if (result && result.resolved) {
+      setSuccess(true)
+    } else {
       setError('One or more storage steps failed. Check logs.')
     }
   }
@@ -31,6 +35,7 @@ export function AnswerForm({ onSubmit }) {
       <button onClick={submit} disabled={submitting}>
         {submitting ? 'Storing...' : '✅ Submit'}
       </button>
+      {success ? <p className="answer-success">Successfully submitted answer!</p> : null}
       {error ? <p className="answer-error">{error}</p> : null}
     </div>
   )

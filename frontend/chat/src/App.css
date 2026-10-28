@@ -18,6 +18,21 @@
   border-bottom: 1px solid var(--border);
 }
 
+.header-home {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
 .header-icon {
   flex-shrink: 0;
   width: 36px;

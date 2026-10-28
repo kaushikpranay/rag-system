@@ -136,3 +136,9 @@
     left: -4px;
   }
 }
+
+.panel-error {
+  font-size: 0.8rem;
+  color: var(--bad);
+  margin: 0 0 8px;
+}

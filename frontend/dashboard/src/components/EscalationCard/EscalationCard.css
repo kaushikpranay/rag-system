@@ -48,11 +48,13 @@
 .value {
   font-size: 14px;
   margin-bottom: 12px;
+  word-break: break-word;
 }
 
 .value.mono {
   font-family: monospace;
   font-size: 12px;
+  word-break: break-all;
 }
 
 .value.muted {

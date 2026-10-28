@@ -17,18 +17,20 @@ def test_recall_precision():
     with open(threshold_results_path, "r", encoding="utf-8") as f:
         threshold_results = json.load(f)
 
-    results_by_query = {
-        item["query"]: item for item in threshold_results.get("details", [])
+    results_by_chunk = {
+        item["expected_chunk_substring"]: item
+        for item in threshold_results.get("details", [])
     }
 
     for item in golden_set:
         query = item["query"]
+        chunk = item["expected_chunk_substring"]
         min_acceptable_sim = item["min_acceptable_similarity"]
 
-        assert query in results_by_query, (
-            f"Query missing from threshold_results.json: '{query}'"
+        assert chunk in results_by_chunk, (
+            f"Chunk missing from threshold_results.json for query '{query}': '{chunk}'"
         )
-        res = results_by_query[query]
+        res = results_by_chunk[chunk]
 
         status = res.get("status")
         correct_sim = res.get("correct_similarity")

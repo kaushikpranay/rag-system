@@ -16,7 +16,7 @@ def test_database_schema_and_connection():
             dbname=os.getenv("RDS_DB", "ragdb"),
             user=os.getenv("RDS_USER", "ragadmin"),
             password=os.getenv("RDS_PASSWORD", ""),
-            connect_timeout=3
+            connect_timeout=10
         )
         conn_test.close()
     except Exception as e:

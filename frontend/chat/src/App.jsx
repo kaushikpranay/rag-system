@@ -66,11 +66,13 @@ function App() {
   return (
     <div className="chat-app">
       <header className="header">
-        <div className="header-icon">🔍</div>
-        <div className="header-text">
-          <h1>RAG Query System</h1>
-          <p>Ask anything related to our system</p>
-        </div>
+        <button className="header-home" onClick={() => window.location.reload()} aria-label="Home">
+          <div className="header-icon">🔍</div>
+          <div className="header-text">
+            <h1>RAG Query System</h1>
+            <p>Ask anything related to our system</p>
+          </div>
+        </button>
         <div className="header-status">
           <span className="status-dot" />
           System Online

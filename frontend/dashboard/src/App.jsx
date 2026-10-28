@@ -12,6 +12,7 @@ function App() {
   const [resolvedIds, setResolvedIds] = useState(new Set())
   const [maxMessages, setMaxMessages] = useState(5)
   const [fetching, setFetching] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const refreshQueueDepth = useCallback(async () => {
     setQueueDepth(await getQueueDepth())
@@ -66,8 +67,36 @@ function App() {
 
   return (
     <div className="dashboard-app">
-      <aside className="sidebar">
-        <h2>🧠 RAG System</h2>
+      <div className="mobile-header">
+        <button className="sidebar-logo" onClick={() => window.location.reload()} aria-label="Home">
+          <h2>🧠 RAG System</h2>
+        </button>
+        <button
+          className="mobile-menu-btn"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          aria-label="Toggle navigation menu"
+        >
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {mobileMenuOpen && (
+        <div className="sidebar-backdrop" onClick={() => setMobileMenuOpen(false)} />
+      )}
+
+      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <button className="sidebar-logo" onClick={() => window.location.reload()} aria-label="Home">
+            <h2>🧠 RAG System</h2>
+          </button>
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
+        </div>
         <p className="subtitle">Human Agent Dashboard</p>
         <QueueMetric depth={queueDepth} />
         <label className="max-messages">

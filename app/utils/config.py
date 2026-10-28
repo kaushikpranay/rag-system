@@ -1,6 +1,9 @@
 import boto3
 import os
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +15,7 @@ def get_secret(name: str, default: str = "") -> str:
         return env_val
 
     try:
-        ssm = boto3.client('ssm', region_name=os.getenv("AWS_REGION", "us-east-1"))
+        ssm = boto3.client('ssm', region_name=os.getenv("AWS_REGION", "ap-southeast-2"))
         response = ssm.get_parameter(Name=name, WithDecryption=True)
         return response['Parameter']['Value']
     except Exception as e:
@@ -21,7 +24,8 @@ def get_secret(name: str, default: str = "") -> str:
 
 
 # AWS
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
+BEDROCK_REGION = os.getenv("BEDROCK_REGION", "us-east-1")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE")
 SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")

@@ -23,7 +23,7 @@ def _check_port(port: int, host: str = "127.0.0.1") -> bool:
     except Exception:
         return False
 
-from app.utils.config import RDS_HOST, RDS_PORT, RDS_DB, RDS_USER, RDS_PASSWORD, AWS_REGION
+from app.utils.config import RDS_HOST, RDS_PORT, RDS_DB, RDS_USER, RDS_PASSWORD, AWS_REGION, BEDROCK_REGION
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,15 @@ _pool = None
 _db_initialized = False
 _reranker_model = None
 
-# Reuse a single Bedrock client instead of creating one per-call
-_bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+# Reuse a single Bedrock client instead of creating one per-call (lazily initialized)
+_bedrock_client = None
+
+
+def _get_bedrock_client():
+    global _bedrock_client
+    if _bedrock_client is None:
+        _bedrock_client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
+    return _bedrock_client
 
 
 def _resolve_db_config():
@@ -200,7 +207,8 @@ def get_bedrock_embedding(text: str) -> list:
     for attempt in range(max_retries + 1):
         try:
             body = json.dumps({"inputText": text})
-            response = _bedrock_client.invoke_model(
+            client = _get_bedrock_client()
+            response = client.invoke_model(
                 modelId="amazon.titan-embed-text-v2:0",
                 contentType="application/json",
                 accept="application/json",
@@ -346,9 +354,11 @@ def store_verified_answer(query: str, answer: str, session_id: str = "") -> bool
     text_to_store = f"Q: {query}\nA: {answer}"
     conn = None
     try:
-        embedding = get_bedrock_embedding(query)  # embed only the query, matching retrieval
-        if not embedding:
-            return False
+        try:
+            embedding = get_bedrock_embedding(query)  # embed only the query, matching retrieval
+        except Exception as emb_e:
+            logger.warning(f"[pgvector] Bedrock embedding skipped during store_verified_answer: {emb_e}")
+            embedding = None
         conn = get_connection()
         cur = conn.cursor()
         try:

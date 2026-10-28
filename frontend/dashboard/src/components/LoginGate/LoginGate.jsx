@@ -11,12 +11,17 @@ export function LoginGate({ onSuccess }) {
     e.preventDefault()
     setSubmitting(true)
     setError(false)
-    const ok = await login(password)
-    setSubmitting(false)
-    if (ok) {
-      onSuccess()
-    } else {
-      setError(true)
+    try {
+      const ok = await login(password)
+      if (ok) {
+        onSuccess()
+      } else {
+        setError('Incorrect password')
+      }
+    } catch (err) {
+      setError('Failed to connect to backend server')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -31,7 +36,7 @@ export function LoginGate({ onSuccess }) {
         autoFocus
       />
       <button type="submit" disabled={submitting}>{submitting ? 'Checking...' : 'Log in'}</button>
-      {error ? <p className="login-error">Incorrect password</p> : null}
+      {error ? <p className="login-error">{error}</p> : null}
     </form>
   )
 }
