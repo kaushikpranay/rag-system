@@ -13,7 +13,13 @@ logger = logging.getLogger(__name__)
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 S3_BUCKET = os.getenv("S3_BUCKET_NAME")
 
-s3 = boto3.client("s3", region_name=AWS_REGION)
+_s3 = None
+
+def _get_s3():
+    global _s3
+    if _s3 is None:
+        _s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "ap-southeast-2"))
+    return _s3
 
 def archive_verified_answer(session_id: str, query: str, answer: str) -> bool:
     """Archive a verified answer to S3 under verified-answers/."""
@@ -25,7 +31,7 @@ def archive_verified_answer(session_id: str, query: str, answer: str) -> bool:
         "verified_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        s3.put_object(
+        _get_s3().put_object(
             Bucket=S3_BUCKET,
             Key=key,
             Body=json.dumps(payload),

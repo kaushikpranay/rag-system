@@ -9,12 +9,18 @@ DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "rag-session-memory")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 MAX_HISTORY_TURNS = 20
 
-dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
-table = dynamodb.Table(DYNAMODB_TABLE)
+_table = None
+
+def _get_table():
+    global _table
+    if _table is None:
+        dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ap-southeast-2"))
+        _table = dynamodb.Table(os.getenv("DYNAMODB_TABLE", "rag-session-memory"))
+    return _table
 
 def get_session(session_id: str) -> list:
     try:
-        response = table.get_item(Key={"session_id": session_id})
+        response = _get_table().get_item(Key={"session_id": session_id})
         item = response.get("Item")
         if not item:
             return []
@@ -35,7 +41,7 @@ def save_session(session_id: str, query: str, answer: str) -> None:
             print(f"[dynamodb] Trimming session {session_id} history from {len(history)} to {MAX_HISTORY_TURNS} entries")
             history = history[-MAX_HISTORY_TURNS:]
         ttl = int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp())
-        table.put_item(Item={
+        _get_table().put_item(Item={
             "session_id": session_id,
             "history": history,
             "expires_at": ttl

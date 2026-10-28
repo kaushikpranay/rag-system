@@ -387,24 +387,48 @@ def store_verified_answer(query: str, answer: str, session_id: str = "") -> bool
 
 
 def search_human_verified(query: str, top_k: int = 3):
-    embedding = get_bedrock_embedding(query)
-    if not embedding:
-        return []
-    embedding_str = "[" + ",".join(map(str, embedding)) + "]"
     conn = get_connection()
     try:
         cur = conn.cursor()
         try:
+            # 1. Exact query match first (deterministic, works even if embedding is null)
+            cur.execute("""
+                SELECT content, metadata, 1.0 AS similarity
+                FROM documents
+                WHERE metadata->>'source' = 'human_verified'
+                  AND LOWER(metadata->>'query') = LOWER(%s)
+                ORDER BY id DESC
+                LIMIT 1
+            """, (query.strip(),))
+            exact_match = cur.fetchall()
+            if exact_match:
+                return exact_match
+
+            # 2. Semantic vector search for paraphrased queries
+            try:
+                embedding = get_bedrock_embedding(query)
+            except Exception as emb_e:
+                logger.warning(f"[pgvector] Bedrock embedding skipped during search_human_verified: {emb_e}")
+                embedding = None
+
+            if not embedding:
+                return []
+
+            embedding_str = "[" + ",".join(map(str, embedding)) + "]"
             cur.execute("""
                 SELECT content, metadata, 1 - (embedding <=> %s::vector) AS similarity
                 FROM documents
                 WHERE metadata->>'source' = 'human_verified'
+                  AND embedding IS NOT NULL
                 ORDER BY embedding <=> %s::vector, id ASC
                 LIMIT %s
             """, (embedding_str, embedding_str, top_k))
             rows = cur.fetchall()
-            return rows
+            return [r for r in rows if r[2] is not None]
         finally:
             cur.close()
+    except Exception as e:
+        logger.error(f"[pgvector] search_human_verified error: {e}")
+        return []
     finally:
         conn.close()

@@ -67,7 +67,7 @@ def retrieval_node(state: AgentState) -> AgentState:
         # Step 1: Human-verified answers first (semantic match)
         from app.retrieval.pgvector_client import search_human_verified
         human_results = search_human_verified(query, top_k=3)
-        if human_results and human_results[0][2] > human_threshold:
+        if human_results and human_results[0][2] is not None and human_results[0][2] > human_threshold:
             logger.info(f"[retrieval_node] Human-verified answer found. Similarity: {human_results[0][2]:.2f} (threshold: {human_threshold})")
             return {
                 **state,
@@ -95,13 +95,13 @@ def context_node(state: AgentState) -> AgentState:
         context = "No relevant context found"
     else:
         context = "\n\n".join([
-            f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
+            f"[Chunk {i+1} | Similarity: {(c.get('similarity') or 0.0):.2f}]\n{c['content']}"
             for i, c in enumerate(chunks)
         ])
 
     est_tokens = len(context) // 4
     if est_tokens > 6000 and chunks:
-        sorted_chunks = sorted(chunks, key=lambda c: c.get("similarity", 0.0), reverse=True)
+        sorted_chunks = sorted(chunks, key=lambda c: (c.get("similarity") or 0.0), reverse=True)
         dropped_count = 0
         while len(context) // 4 > 6000 and sorted_chunks:
             sorted_chunks.pop()  # Drop lowest-similarity chunk
@@ -110,7 +110,7 @@ def context_node(state: AgentState) -> AgentState:
                 context = "No relevant context found"
             else:
                 context = "\n\n".join([
-                    f"[Chunk {i+1} | Similarity: {c.get('similarity', 0.0):.2f}]\n{c['content']}"
+                    f"[Chunk {i+1} | Similarity: {(c.get('similarity') or 0.0):.2f}]\n{c['content']}"
                     for i, c in enumerate(sorted_chunks)
                 ])
 
