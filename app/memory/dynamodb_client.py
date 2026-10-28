@@ -6,21 +6,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "rag-session-memory")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 MAX_HISTORY_TURNS = 20
 
-_table = None
+table = None
 
 def _get_table():
-    global _table
-    if _table is None:
-        dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ap-southeast-2"))
-        _table = dynamodb.Table(os.getenv("DYNAMODB_TABLE", "rag-session-memory"))
-    return _table
+    global table
+    if table is None:
+        try:
+            dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+            table = dynamodb.Table(DYNAMODB_TABLE)
+        except Exception as e:
+            print(f"[dynamodb] init table error: {e}")
+            return None
+    return table
 
 def get_session(session_id: str) -> list:
+    t = table or _get_table()
+    if t is None:
+        return []
     try:
-        response = _get_table().get_item(Key={"session_id": session_id})
+        response = t.get_item(Key={"session_id": session_id})
         item = response.get("Item")
         if not item:
             return []
@@ -30,6 +37,9 @@ def get_session(session_id: str) -> list:
         return []
 
 def save_session(session_id: str, query: str, answer: str) -> None:
+    t = table or _get_table()
+    if t is None:
+        return
     try:
         history = get_session(session_id)
         history.append({
@@ -41,7 +51,7 @@ def save_session(session_id: str, query: str, answer: str) -> None:
             print(f"[dynamodb] Trimming session {session_id} history from {len(history)} to {MAX_HISTORY_TURNS} entries")
             history = history[-MAX_HISTORY_TURNS:]
         ttl = int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp())
-        _get_table().put_item(Item={
+        t.put_item(Item={
             "session_id": session_id,
             "history": history,
             "expires_at": ttl

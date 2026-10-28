@@ -7,32 +7,41 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")
 DYNAMODB_PENDING_TABLE = os.getenv("DYNAMODB_PENDING_TABLE", "rag-pending-escalations")
 
-_sqs = None
-_pending_table = None
+sqs = None
+pending_table = None
 
 def _get_sqs():
-    global _sqs
-    if _sqs is None:
-        _sqs = boto3.client("sqs", region_name=os.getenv("AWS_REGION", "ap-southeast-2"))
-    return _sqs
+    global sqs
+    if sqs is None:
+        try:
+            sqs = boto3.client("sqs", region_name=AWS_REGION)
+        except Exception:
+            return None
+    return sqs
 
 def _get_pending_table():
-    global _pending_table
-    if _pending_table is None:
-        dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ap-southeast-2"))
-        _pending_table = dynamodb.Table(os.getenv("DYNAMODB_PENDING_TABLE", "rag-pending-escalations"))
-    return _pending_table
+    global pending_table
+    if pending_table is None:
+        try:
+            dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+            pending_table = dynamodb.Table(DYNAMODB_PENDING_TABLE)
+        except Exception:
+            return None
+    return pending_table
 
 
 def is_duplicate_pending(query: str) -> bool:
+    pt = pending_table or _get_pending_table()
+    if pt is None:
+        return False
     try:
         normalized = query.strip().lower()
         query_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        response = _get_pending_table().get_item(Key={"query_hash": query_hash})
+        response = pt.get_item(Key={"query_hash": query_hash})
         item = response.get("Item")
         if not item:
             return False
@@ -47,13 +56,16 @@ def is_duplicate_pending(query: str) -> bool:
 
 
 def mark_pending(query: str) -> None:
+    pt = pending_table or _get_pending_table()
+    if pt is None:
+        return
     try:
         normalized = query.strip().lower()
         query_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
         now = datetime.now(timezone.utc)
         created_at = now.isoformat()
         expires_at = int((now + timedelta(hours=1)).timestamp())
-        _get_pending_table().put_item(Item={
+        pt.put_item(Item={
             "query_hash": query_hash,
             "query": query,
             "created_at": created_at,
@@ -64,10 +76,13 @@ def mark_pending(query: str) -> None:
 
 
 def clear_pending(query: str) -> bool:
+    pt = pending_table or _get_pending_table()
+    if pt is None:
+        return False
     try:
         normalized = query.strip().lower()
         query_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        _get_pending_table().delete_item(Key={"query_hash": query_hash})
+        pt.delete_item(Key={"query_hash": query_hash})
         print(f"[dynamodb] Pending escalation cleared for query: {query}")
         return True
     except Exception as e:
@@ -76,6 +91,9 @@ def clear_pending(query: str) -> bool:
 
 
 def send_to_sqs(session_id: str, query: str, answer: str) -> bool:
+    s = sqs or _get_sqs()
+    if s is None:
+        return False
     try:
         if is_duplicate_pending(query):
             print(f"[sqs] Query is already pending, skipping SQS send: {query}")
@@ -89,7 +107,7 @@ def send_to_sqs(session_id: str, query: str, answer: str) -> bool:
             "answer": answer
         }
 
-        _get_sqs().send_message(
+        s.send_message(
             QueueUrl=SQS_QUEUE_URL,
             MessageBody=json.dumps(message)
         )
@@ -102,8 +120,11 @@ def send_to_sqs(session_id: str, query: str, answer: str) -> bool:
 
 
 def receive_from_sqs(max_messages: int = 10) -> list:
+    s = sqs or _get_sqs()
+    if s is None:
+        return []
     try:
-        response = _get_sqs().receive_message(
+        response = s.receive_message(
             QueueUrl=SQS_QUEUE_URL,
             MaxNumberOfMessages=max_messages,
             WaitTimeSeconds=5
@@ -115,8 +136,11 @@ def receive_from_sqs(max_messages: int = 10) -> list:
 
 
 def delete_from_sqs(receipt_handle: str) -> bool:
+    s = sqs or _get_sqs()
+    if s is None:
+        return False
     try:
-        _get_sqs().delete_message(
+        s.delete_message(
             QueueUrl=SQS_QUEUE_URL,
             ReceiptHandle=receipt_handle
         )
@@ -128,12 +152,15 @@ def delete_from_sqs(receipt_handle: str) -> bool:
 
 
 def get_queue_depth() -> int:
+    s = sqs or _get_sqs()
+    if s is None:
+        return -1
     try:
-        resp = _get_sqs().get_queue_attributes(
+        resp = s.get_queue_attributes(
             QueueUrl=SQS_QUEUE_URL,
             AttributeNames=["ApproximateNumberOfMessages"]
         )
         return int(resp["Attributes"].get("ApproximateNumberOfMessages", 0))
     except Exception as e:
         print(f"[sqs] get_queue_depth error: {e}")
-        return -1
+        return -1
